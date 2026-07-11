@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PRIVATE POSTER v4 — 1 key per button, 3 per row, each copies the key on tap"""
+"""PRIVATE POSTER v5 — URL buttons to subscription files, each file = 1 button"""
 import os, sys, requests, re, time
 from datetime import datetime
 from requests.adapters import HTTPAdapter
@@ -15,11 +15,7 @@ BOT = os.environ.get('TELEGRAM_BOT_TOKEN')
 CHAN = os.environ.get('TELEGRAM_PRIVATE_CHANNEL')
 COVER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cover_private.jpg')
 SUBURL = 'https://raw.githubusercontent.com/kort0881/vpn-checker-backend/refs/heads/main/checked/subscriptions_list.txt'
-
-# Telegram API limits
-MAX_BUTTONS_PER_MSG = 100  # max inline buttons per message
-BTN_PER_ROW = 3
-MSG_INTERVAL = 1.5  # seconds between messages to avoid flood
+BASE_RAW = 'https://raw.githubusercontent.com/kort0881/vpn-checker-backend/refs/heads/main'
 
 def parsecats(t):
     cats, cur = {}, None
@@ -60,7 +56,17 @@ def loadkeys():
     except Exception as e: print(e); return []
     cats = parsecats(r.text)
     print(f'Categories: {len(cats)}')
-    for c, u in cats.items(): print(f'  {c}: {len(u)} files')
+    
+    # Gather URLs by group, skip black
+    urls_by_group = {}
+    for cn, us in sorted(cats.items(), key=lambda x: groupprio(getgroup(x[0]))):
+        g = getgroup(cn)
+        if g == 'X': continue
+        if g not in urls_by_group: urls_by_group[g] = []
+        for u in us:
+            urls_by_group[g].append(u)
+    
+    # Load keys for counting (dedup across groups)
     allkeys, seen = [], set()
     for cn, us in sorted(cats.items(), key=lambda x: groupprio(getgroup(x[0]))):
         g = getgroup(cn)
@@ -73,8 +79,9 @@ def loadkeys():
             for k in ks:
                 if k not in seen: seen.add(k); allkeys.append(k); n += 1
             print(f'  {fn}: {len(ks)} total, {n} new')
-    print(f'\nTotal: {len(allkeys)}')
-    return allkeys
+    
+    print(f'\nTotal unique: {len(allkeys)}')
+    return allkeys, urls_by_group
 
 def sendphoto(ch, fp, cap='', bot=None):
     if DRY: print(f'[DRY] photo {ch}'); return {'ok': True}
@@ -95,86 +102,67 @@ def sendmsg(ch, text, bot, markup=None):
         if markup: p['reply_markup'] = markup
         r = s.post(f'https://api.telegram.org/bot{bot}/sendMessage', json=p, timeout=30)
         j = r.json()
-        if not j.get('ok'): print(f'msg fail: {j.get("description")}, text_len={len(text)}')
+        if not j.get('ok'): print(f'msg fail: {j.get("description")}')
         return j
     except Exception as e: print(f'msg error: {e}')
     return {'ok': False}
 
-def build_keyboard(keys_slice):
-    """1 key per button, 3 per row. Returns {'inline_keyboard': ...}"""
-    kbd, row = [], []
-    for k in keys_slice:
-        # truncate button text to ~60 chars for display, but copy_text has full key
-        display = k[:60] + '..' if len(k) > 62 else k
-        row.append({'text': display, 'copy_text': {'text': k}})
-        if len(row) == BTN_PER_ROW:
-            kbd.append(row)
-            row = []
-    if row: kbd.append(row)
-    return {'inline_keyboard': kbd}
-
-def send_subs_buttons():
-    """Fetch subscriptions list and send as copy_text buttons (not keys)"""
-    print('\n--- Subs buttons ---')
-    try:
-        r = s.get(SUBURL, timeout=30)
-        if r.status_code != 200: return
-    except: return
-    cats = parsecats(r.text)
-    urls = []
-    for cn, us in sorted(cats.items(), key=lambda x: groupprio(getgroup(x[0]))):
-        if getgroup(cn) == 'X': continue
-        for u in us: urls.append(u)
-    if not urls: return
-    # first 100 URLs as buttons
-    urls = urls[:100]
-    kbd, row = [], []
-    for u in urls:
-        name = u.split('/')[-1].replace('.txt', '')[:30]
-        row.append({'text': f'📥 {name}', 'url': u})
-        if len(row) == 2:
-            kbd.append(row); row = []
-    if row: kbd.append(row)
-    sendmsg(CHAN, '<b>📋 Subscription links (tap to open)</b>', BOT, {'inline_keyboard': kbd})
-    time.sleep(MSG_INTERVAL)
-
 def main():
     if not BOT or not CHAN: print('No TOKEN/CHANNEL'); return 1
-    print('PRIVATE POSTER v4\n')
+    print('PRIVATE POSTER v5\n')
     if DRY: print('DRY RUN\n')
-    ak = loadkeys()
+    
+    ak, urls_by_group = loadkeys()
     if not ak: print('No keys'); return 1
     total = len(ak)
-    print(f'\n{total} keys total')
 
-    # 1. Send cover photo
-    cap = f'<b>🔐 VPN Keys</b>\n📅 {datetime.now().strftime("%Y-%m-%d %H:%M")}\n📦 Total: {total}'
+    # 1. Cover photo with stats
+    cap = (f'<b>🔐 VPN Keys</b>\n'
+           f'📅 {datetime.now().strftime("%Y-%m-%d %H:%M")}\n'
+           f'📦 <b>{total}</b> keys\n\n'
+           f'⬇️ Tap buttons below to open subscription files')
     if os.path.exists(COVER):
         r = sendphoto(CHAN, COVER, cap, BOT)
-        print(f'Photo sent: ok={r.get("ok")}')
+        print(f'Photo: ok={r.get("ok")}')
     else:
         sendmsg(CHAN, cap, BOT)
-    time.sleep(MSG_INTERVAL)
+    time.sleep(1.5)
 
-    # 2. Send subscriptions links as URL buttons
-    send_subs_buttons()
+    # 2. Buttons: each button = 1 subscription file URL
+    MX = 100  # max buttons per message
+    
+    # Sort groups by priority
+    group_order = ['EF', 'RF', 'EA', 'RA', 'O']
+    for g in group_order:
+        urls = urls_by_group.get(g, [])
+        if not urls: continue
+        
+        label_map = {'EF': '🇪🇺 EUROPE (FAST)', 'RF': '🇷🇺 RUSSIA (FAST)', 
+                     'EA': '🇪🇺 EUROPE (ALL)', 'RA': '🇷🇺 RUSSIA (ALL)', 'O': 'OTHER'}
+        
+        for start in range(0, len(urls), MX):
+            batch = urls[start:start + MX]
+            kbd, row = [], []
+            for u in batch:
+                fname = u.split('/')[-1].replace('.txt', '')[:30]
+                row.append({'text': f'📥 {fname}', 'url': u})
+                if len(row) == 2:
+                    kbd.append(row); row = []
+            if row: kbd.append(row)
+            
+            title = f'{label_map.get(g, g)}'
+            if len(urls) > MX:
+                title += f' ({start+1}-{start+len(batch)})'
+            
+            r = sendmsg(CHAN, f'<b>{title}</b>', BOT, {'inline_keyboard': kbd})
+            ok = r.get('ok', False)
+            print(f'  {title}: {len(batch)} buttons, ok={ok}')
+            if not ok:
+                print(f'  ⚠️ FAILED, stopping')
+                return 1
+            time.sleep(1.0)
 
-    # 3. Send key buttons in batches of MAX_BUTTONS_PER_MSG
-    batch_num = 0
-    for start in range(0, total, MAX_BUTTONS_PER_MSG):
-        batch_num += 1
-        keys_batch = ak[start:start + MAX_BUTTONS_PER_MSG]
-        batch_label = f'Keys {start+1}-{start+len(keys_batch)}'
-        kbd = build_keyboard(keys_batch)
-        r = sendmsg(CHAN, f'<b>🔑 {batch_label}</b>\nTap a key to copy it', BOT, kbd)
-        ok = r.get('ok', False)
-        print(f'  Batch #{batch_num}: {len(keys_batch)} keys, ok={ok}')
-        if not ok:
-            print(f'  ⚠️ Batch #{batch_num} FAILED, stopping')
-            break
-        time.sleep(MSG_INTERVAL)
-
-    print(f'Done. Sent {batch_num} batches')
+    print('\n✅ All subscription buttons sent')
     return 0
 
 if __name__ == '__main__': sys.exit(main())
