@@ -1,300 +1,125 @@
 #!/usr/bin/env python3
-"""
-Private VPN Keys Telegram Poster v2.
-Категоризированный постер без пинга и без файла.
-Источник: subscriptions_list.txt (список URL по категориям)
-Чанки по 100 ключей → инлайн-кнопки с копированием
-Приоритет: EU → RU → всё остальное
-"""
-import os
-import sys
-import requests
-import base64
-import re
-import time
+"""VIP key poster - categories, 100 per chunk, no proxy"""
+import os, sys, requests, re, time
 from datetime import datetime
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from typing import Dict, List, Tuple
 
+s = requests.Session()
+r = Retry(total=3, backoff_factor=1, status_forcelist=[500,502,503,504], allowed_methods=['HEAD','GET','OPTIONS'])
+a = HTTPAdapter(max_retries=r)
+s.mount('http://', a); s.mount('https://', a)
 
-def get_robust_session(retries=3, backoff_factor=1):
-    session = requests.Session()
-    retry_strategy = Retry(
-        total=retries,
-        backoff_factor=backoff_factor,
-        status_forcelist=[500, 502, 503, 504],
-        allowed_methods=["HEAD", "GET", "OPTIONS"],
-    )
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
-    return session
+DRY = os.environ.get('TELEGRAM_DRY_RUN', '0') == '1'
+BOT = os.environ.get('TELEGRAM_BOT_TOKEN')
+CHAN = os.environ.get('TELEGRAM_PRIVATE_CHANNEL')
+COVER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cover_private.jpg')
+SUBURL = 'https://raw.githubusercontent.com/kort0881/vpn-checker-backend/refs/heads/main/checked/subscriptions_list.txt'
+CHUNK = 100
 
+def parsecats(t):
+    cats, cur = {}, None
+    for l in t.strip().split('\n'):
+        l = l.strip()
+        if not l or l[0] == '#': continue
+        m = re.match(r'===\s*(.+?)\s*===', l)
+        if m: cur = m.group(1).strip(); cats[cur] = []; continue
+        if l.startswith('http') and '.txt' in l and cur: cats[cur].append(l)
+    return cats
 
-robust_session = get_robust_session()
+def getgroup(c):
+    c = c.lower()
+    if 'black' in c: return 'X'
+    if 'europe' in c or 'euro' in c: return 'EF' if ('fast' in c or 'white' in c) else 'EA'
+    if 'russia' in c or 'ru_' in c: return 'RF' if ('fast' in c or 'white' in c) else 'RA'
+    return 'O'
 
-# --- КОНФИГУРАЦИЯ ---
-DRY_RUN = os.environ.get("TELEGRAM_DRY_RUN", "0") == "1"
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-CHANNEL_ID = os.environ.get("TELEGRAM_PRIVATE_CHANNEL")
+def groupprio(g): return {'EF':1,'RF':2,'EA':3,'RA':4,'O':5,'X':99}.get(g,99)
 
-WORK_DIR = os.path.dirname(os.path.abspath(__file__))
-COVER = os.path.join(WORK_DIR, "cover_private.jpg")
-
-SUBSCRIPTIONS_URL = "https://raw.githubusercontent.com/kort0881/vpn-checker-backend/refs/heads/main/checked/subscriptions_list.txt"
-PROXIES_URL = "https://raw.githubusercontent.com/kort0881/telegram-proxy-collector/main/verified/proxy_all_tme_verified.txt"
-KEYS_PER_CHUNK = 100
-
-
-def parse_categories(text: str) -> Dict[str, List[str]]:
-    categories = {}
-    current_category = None
-    for line in text.strip().split("\n"):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        cat_match = re.match(r"===\s*(.+?)\s*===", line)
-        if cat_match:
-            current_category = cat_match.group(1).strip()
-            categories[current_category] = []
-            continue
-        if line.startswith("http") and ".txt" in line and current_category:
-            categories[current_category].append(line)
-    return categories
-
-
-def categorize_key_category(cat_name: str) -> str:
-    name = cat_name.lower()
-    if "europe" in name or "euro" in name or "🇪🇺" in name:
-        if "fast" in name or "white" in name:
-            return "EU_FAST"
-        return "EU_ALL"
-    if "russia" in name or "ru_" in name or "🇷🇺" in name:
-        if "fast" in name or "white" in name:
-            return "RU_FAST"
-        return "RU_ALL"
-    return "OTHER"
-
-
-def get_category_priority(group: str) -> int:
-    return {"EU_FAST": 1, "RU_FAST": 2, "EU_ALL": 3, "RU_ALL": 4, "OTHER": 5}.get(group, 6)
-
-
-def fetch_keys_from_url(url: str) -> List[str]:
+def fetchkeys(url):
     try:
-        resp = robust_session.get(url, timeout=30)
-        if resp.status_code != 200:
-            return []
-        keys = []
-        for line in resp.text.strip().split("\n"):
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if any(line.startswith(p) for p in ["vless://", "vmess://", "trojan://", "ss://", "ssr://"]):
-                keys.append(line)
-        return keys
-    except Exception:
-        return []
+        r = s.get(url, timeout=30)
+        if r.status_code != 200: return []
+        res = []
+        for l in r.text.strip().split('\n'):
+            l = l.strip()
+            if not l or l[0] == '#': continue
+            if any(l.startswith(p) for p in ['vless://','vmess://','trojan://','ss://','ssr://']): res.append(l)
+        return res
+    except: return []
 
-
-def load_all_keys() -> List[Tuple[str, str]]:
-    print("📥 Загрузка subscriptions_list.txt...")
+def loadkeys():
+    print('Loading subscriptions...')
     try:
-        resp = robust_session.get(SUBSCRIPTIONS_URL, timeout=30)
-        if resp.status_code != 200:
-            print(f"❌ HTTP {resp.status_code}")
-            return []
-    except Exception as e:
-        print(f"❌ {e}")
-        return []
+        r = s.get(SUBURL, timeout=30)
+        if r.status_code != 200: print(f'HTTP {r.status_code}'); return []
+    except Exception as e: print(e); return []
+    cats = parsecats(r.text)
+    print(f'Categories: {len(cats)}')
+    for c, u in cats.items(): print(f'  {c}: {len(u)} files')
+    allkeys, seen = [], set()
+    for cn, us in sorted(cats.items(), key=lambda x: groupprio(getgroup(x[0]))):
+        g = getgroup(cn)
+        if g == 'X': print(f'\nSkip BLACK: {cn}'); continue
+        print(f'\n{cn} -> {g}')
+        for u in us:
+            ks = fetchkeys(u)
+            fn = u.split('/')[-1].split('?')[0]
+            n = 0
+            for k in ks:
+                if k not in seen: seen.add(k); allkeys.append((k,g)); n += 1
+            print(f'  {fn}: {len(ks)} total, {n} new')
+    print(f'\nTotal: {len(allkeys)}')
+    return allkeys
 
-    categories = parse_categories(resp.text)
-    print(f"\n📂 Найдено категорий: {len(categories)}")
-    for cat, urls in categories.items():
-        print(f"   {cat}: {len(urls)} файлов")
+def chunkkeys(keys): return [keys[i:i+CHUNK] for i in range(0, len(keys), CHUNK)]
 
-    cat_list = sorted(categories.items(), key=lambda x: get_category_priority(categorize_key_category(x[0])))
-    all_keys = []
-    seen = set()
-
-    for cat_name, urls in cat_list:
-        group = categorize_key_category(cat_name)
-        print(f"\n📥 {cat_name} (группа: {group})...")
-        for url in urls:
-            keys = fetch_keys_from_url(url)
-            filename = url.split("/")[-1].split("?")[0]
-            new_count = 0
-            for key in keys:
-                if key not in seen:
-                    seen.add(key)
-                    all_keys.append((key, group))
-                    new_count += 1
-            print(f"   {filename}: {len(keys)} загружено, {new_count} новых")
-
-    print(f"\n✅ Всего уникальных ключей: {len(all_keys)}")
-    return all_keys
-
-
-def chunk_keys(keys: List[Tuple[str, str]]) -> List[List[Tuple[str, str]]]:
-    return [keys[i:i + KEYS_PER_CHUNK] for i in range(0, len(keys), KEYS_PER_CHUNK)]
-
-
-def load_active_proxies(limit=10):
+def sendphoto(ch, fp, cap='', bot=None):
+    if DRY: print(f'[DRY] photo {ch}'); return
     try:
-        resp = robust_session.get(PROXIES_URL, timeout=30)
-        if resp.status_code != 200:
-            return []
-        proxies = []
-        for line in resp.text.strip().split("\n"):
-            line = line.strip()
-            if line and not line.startswith("#"):
-                proxies.append(line)
-                if len(proxies) >= limit:
-                    break
-        return proxies
-    except Exception:
-        return []
+        with open(fp, 'rb') as ph:
+            s.post(f'https://api.telegram.org/bot{bot}/sendPhoto',
+                data={'chat_id': ch, 'caption': cap, 'parse_mode': 'HTML'}, files={'photo': ph}, timeout=60)
+    except: pass
 
-
-def send_photo(channel_id, photo_path, caption="", bot_token=None):
-    url = f"https://api.telegram.org/bot{bot_token}"
-    if DRY_RUN:
-        print(f"\n[DRY_RUN] sendPhoto -> {channel_id}")
-        return None
+def sendmsg(ch, text, bot, markup=None):
+    if DRY: print(f'[DRY] msg {ch}'); return
     try:
-        with open(photo_path, "rb") as photo:
-            r = robust_session.post(
-                f"{url}/sendPhoto",
-                data={"chat_id": channel_id, "caption": caption, "parse_mode": "HTML"},
-                files={"photo": photo},
-                timeout=60,
-            )
-            return r.json()
-    except Exception as e:
-        print(f"❌ Ошибка фото: {e}")
-        return None
+        p = {'chat_id': ch, 'text': text, 'parse_mode': 'HTML', 'disable_web_page_preview': True}
+        if markup: p['reply_markup'] = markup
+        s.post(f'https://api.telegram.org/bot{bot}/sendMessage', json=p, timeout=30)
+    except: pass
 
-
-def send_message(channel_id, text, bot_token, reply_markup=None):
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    if DRY_RUN:
-        print(f"\n[DRY_RUN] sendMessage -> {channel_id}")
-        return {"ok": True}
-    try:
-        payload = {
-            "chat_id": channel_id,
-            "text": text,
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        }
-        if reply_markup:
-            payload["reply_markup"] = reply_markup
-        r = robust_session.post(url, json=payload, timeout=30)
-        return r.json()
-    except Exception as e:
-        print(f"❌ Ошибка сообщения: {e}")
-        return None
-
-
-def build_keyboard(keys: List[Tuple[str, str]], offset: int) -> dict:
-    keyboard = []
-    row = []
-    for i, (key, group) in enumerate(keys, start=offset + 1):
-        row.append({"text": f"🔑 {i}", "copy_text": {"text": key}})
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
-    return {"inline_keyboard": keyboard}
-
+def buildkbd(keys, off):
+    kbd, row = [], []
+    for i, (k, _) in enumerate(keys, off+1):
+        row.append({'text': f'🔑 {i}', 'copy_text': {'text': k}})
+        if len(row) == 2: kbd.append(row); row = []
+    if row: kbd.append(row)
+    return {'inline_keyboard': kbd}
 
 def main():
-    if not BOT_TOKEN or not CHANNEL_ID:
-        print("❌ Не установлены TELEGRAM_BOT_TOKEN или TELEGRAM_PRIVATE_CHANNEL")
-        return 1
-
-    print("\n" + "=" * 70)
-    print(" " * 20 + "📤 PRIVATE TELEGRAM POSTER v2")
-    print("=" * 70 + "\n")
-
-    if DRY_RUN:
-        print("⚙️ Режим DRY_RUN\n")
-
-    all_keys = load_all_keys()
-    if not all_keys:
-        print("❌ Нет ключей")
-        return 1
-
-    total = len(all_keys)
-    chunks = chunk_keys(all_keys)
-    print(f"\n📦 Всего: {total} ключей")
-    print(f"📨 Чанков по {KEYS_PER_CHUNK}: {len(chunks)}")
-
-    proxies = load_active_proxies(limit=10)
-    proxies_keyboard = None
-    if proxies:
-        keyboard = []
-        row = []
-        for i, p in enumerate(proxies, start=1):
-            row.append({"text": f"📡 Прокси {i}", "copy_text": {"text": p}})
-            if len(row) == 2:
-                keyboard.append(row)
-                row = []
-        if row:
-            keyboard.append(row)
-        proxies_keyboard = {"inline_keyboard": keyboard}
-
-    print(f"\n🔒 Канал: {CHANNEL_ID}\n")
-
-    caption = (
-        f"🔐 <b>VPN-ключи</b>\n\n"
-        f"📅 <code>{datetime.now().strftime('%Y-%m-%d %H:%M')}</code>\n"
-        f"📊 Всего: <b>{total}</b> ключей\n"
-        f"📨 Сообщений: <b>{len(chunks)}</b>\n\n"
-        f"📡 VLESS | VMess | Trojan | SS"
-    )
-    if os.path.exists(COVER):
-        send_photo(CHANNEL_ID, COVER, caption, BOT_TOKEN)
-    else:
-        send_message(CHANNEL_ID, caption, BOT_TOKEN)
-
+    if not BOT or not CHAN: print('No TOKEN/CHANNEL'); return 1
+    print('PRIVATE POSTER v3\n')
+    if DRY: print('DRY RUN\n')
+    ak = loadkeys()
+    if not ak: print('No keys'); return 1
+    cs = chunkkeys(ak)
+    print(f'\n{len(ak)} keys, {len(cs)} chunks\n')
+    cap = f'VPN keys\n{datetime.now().strftime("%Y-%m-%d %H:%M")}\nTotal: {len(ak)}'
+    if os.path.exists(COVER): sendphoto(CHAN, COVER, cap, BOT)
+    else: sendmsg(CHAN, cap, BOT)
     time.sleep(1)
+    off = 0
+    for c in cs:
+        gs = set(g for _,g in c)
+        if 'EF' in gs: em = 'EU'
+        elif 'RF' in gs: em = 'RU'
+        elif 'EA' in gs: em = 'EU'
+        elif 'RA' in gs: em = 'RU'
+        else: em = 'GL'
+        sendmsg(CHAN, f'{em} Keys {off+1}-{off+len(c)}', BOT, buildkbd(c, off))
+        off += len(c); time.sleep(0.5)
+    print('Done'); return 0
 
-    global_offset = 0
-    for idx, chunk in enumerate(chunks):
-        groups = set(g for _, g in chunk)
-        if "EU_FAST" in groups:
-            emoji = "🇪🇺⚡"
-        elif "RU_FAST" in groups:
-            emoji = "🇷🇺⚡"
-        elif "EU_ALL" in groups:
-            emoji = "🇪🇺"
-        elif "RU_ALL" in groups:
-            emoji = "🇷🇺"
-        else:
-            emoji = "🌍"
-
-        chunk_start = global_offset + 1
-        chunk_end = global_offset + len(chunk)
-        text = f"{emoji} <b>Ключи {chunk_start}-{chunk_end}</b>\nНажми на кнопку — ключ скопируется в буфер."
-        keyboard = build_keyboard(chunk, global_offset)
-        send_message(CHANNEL_ID, text, BOT_TOKEN, keyboard)
-        global_offset += len(chunk)
-        time.sleep(0.5)
-
-    if proxies_keyboard:
-        send_message(
-            CHANNEL_ID,
-            "📡 <b>Активные прокси для Telegram</b>",
-            BOT_TOKEN,
-            proxies_keyboard,
-        )
-
-    print("\n✅ Готово")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+if __name__ == '__main__': sys.exit(main())
