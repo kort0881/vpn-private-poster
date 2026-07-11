@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VIP key poster - 20 buttons, rest in file by 1000"""
+"""VIP key poster - 20 buttons x100, rest buttons x1000"""
 import os, sys, requests, re, time
 from datetime import datetime
 from requests.adapters import HTTPAdapter
@@ -15,7 +15,6 @@ BOT = os.environ.get('TELEGRAM_BOT_TOKEN')
 CHAN = os.environ.get('TELEGRAM_PRIVATE_CHANNEL')
 COVER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cover_private.jpg')
 SUBURL = 'https://raw.githubusercontent.com/kort0881/vpn-checker-backend/refs/heads/main/checked/subscriptions_list.txt'
-CHUNK = 1000
 
 def parsecats(t):
     cats, cur = {}, None
@@ -72,7 +71,7 @@ def loadkeys():
     print(f'\nTotal: {len(allkeys)}')
     return allkeys
 
-def chunkkeys(keys): return [keys[i:i+CHUNK] for i in range(0, len(keys), CHUNK)]
+def chunkkeys(keys, sz): return [keys[i:i+sz] for i in range(0, len(keys), sz)]
 
 def sendphoto(ch, fp, cap='', bot=None):
     if DRY: print(f'[DRY] photo {ch}'); return
@@ -90,28 +89,14 @@ def sendmsg(ch, text, bot, markup=None):
         s.post(f'https://api.telegram.org/bot{bot}/sendMessage', json=p, timeout=30)
     except: pass
 
-def senddoc(ch, fp, cap='', bot=None):
-    if DRY: print(f'[DRY] doc {ch}'); return
-    try:
-        with open(fp, 'rb') as f:
-            s.post(f'https://api.telegram.org/bot{bot}/sendDocument',
-                data={'chat_id': ch, 'caption': cap, 'parse_mode': 'HTML'}, files={'document': f}, timeout=120)
-    except: pass
-
-def buildkbd(keys):
+def buildkbd(keys, label_prefix):
     kbd, row = [], []
-    for i, (k, _) in enumerate(keys, 1):
-        row.append({'text': f'🔑 {i}', 'copy_text': {'text': k}})
+    for i, chunk in enumerate(keys, 1):
+        txt = '\n'.join(k for k,_ in chunk)
+        row.append({'text': f'{label_prefix} {i}', 'copy_text': {'text': txt}})
         if len(row) == 2: kbd.append(row); row = []
     if row: kbd.append(row)
     return {'inline_keyboard': kbd}
-
-def writekeysfile(keys, num):
-    fn = f'/tmp/keys_part{num}.txt'
-    with open(fn, 'w') as f:
-        for k, _ in keys:
-            f.write(k + '\n')
-    return fn
 
 def main():
     if not BOT or not CHAN: print('No TOKEN/CHANNEL'); return 1
@@ -120,22 +105,20 @@ def main():
     ak = loadkeys()
     if not ak: print('No keys'); return 1
     total = len(ak)
-    btns = ak[:20]
-    rest = ak[20:]
-    files = chunkkeys(rest)
-    print(f'\n{total} keys: {len(btns)} buttons, {len(files)} files x {CHUNK}')
-    cap = f'VPN keys\n{datetime.now().strftime("%Y-%m-%d %H:%M")}\nTotal: {total}\nButtons: {len(btns)}'
+    small = ak[:2000]  # максимум 20 кнопок x 100
+    big = ak[2000:]
+    small_chunks = chunkkeys(small, 100)
+    big_chunks = chunkkeys(big, 1000)
+    print(f'\n{total} keys: {len(small_chunks)} small btns, {len(big_chunks)} big btns')
+    cap = f'VPN keys\n{datetime.now().strftime("%Y-%m-%d %H:%M")}\nTotal: {total}'
     if os.path.exists(COVER): sendphoto(CHAN, COVER, cap, BOT)
     else: sendmsg(CHAN, cap, BOT)
     time.sleep(1)
-    if btns:
-        sendmsg(CHAN, f'Top {len(btns)} keys', BOT, buildkbd(btns))
+    if small_chunks:
+        sendmsg(CHAN, f'Small ({len(small_chunks)} x 100)', BOT, buildkbd(small_chunks, 'S'))
         time.sleep(0.5)
-    for i, chunk in enumerate(files, 1):
-        fp = writekeysfile(chunk, i)
-        senddoc(CHAN, fp, f'Keys part {i} ({(i-1)*CHUNK+21}-{(i-1)*CHUNK+len(chunk)+20})', BOT)
-        os.remove(fp)
-        time.sleep(0.5)
+    if big_chunks:
+        sendmsg(CHAN, f'\n---\nBig ({len(big_chunks)} x 1000)\n---', BOT, buildkbd(big_chunks, 'B'))
     print('Done'); return 0
 
 if __name__ == '__main__': sys.exit(main())
