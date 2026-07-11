@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """
-Private VPN Keys Telegram Poster.
-Публикует VPN-ключи в приватный Telegram-канал каждые 2 часа.
-
-Источник ключей: subscriptions_list.txt из vpn-checker-backend.
-Первые 20 ключей — кнопки с копированием, остальные в файле.
+Private VPN Keys Telegram Poster v2.
+Категоризированный постер без пинга и без файла.
+Источник: subscriptions_list.txt (список URL по категориям)
+Чанки по 100 ключей → инлайн-кнопки с копированием
+Приоритет: EU → RU → всё остальное
 """
 import os
 import sys
 import requests
 import base64
+import re
+import time
 from datetime import datetime
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from typing import Dict, List, Tuple
 
 
-# --- УСТОЙЧИВАЯ СЕССИЯ ---
 def get_robust_session(retries=3, backoff_factor=1):
     session = requests.Session()
     retry_strategy = Retry(
@@ -38,22 +40,51 @@ BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.environ.get("TELEGRAM_PRIVATE_CHANNEL")
 
 WORK_DIR = os.path.dirname(os.path.abspath(__file__))
-RESULTS_FOLDER = os.path.join(WORK_DIR, "results")
 COVER = os.path.join(WORK_DIR, "cover_private.jpg")
 
-# Единственный источник ключей
 SUBSCRIPTIONS_URL = "https://raw.githubusercontent.com/kort0881/vpn-checker-backend/refs/heads/main/checked/subscriptions_list.txt"
-# Прокси
 PROXIES_URL = "https://raw.githubusercontent.com/kort0881/telegram-proxy-collector/main/verified/proxy_all_tme_verified.txt"
+KEYS_PER_CHUNK = 100
 
 
-# --- ЗАГРУЗКА КЛЮЧЕЙ ---
-def fetch_keys_from_url(url: str) -> list:
-    """Скачивает файл по URL и извлекает VPN-ключи."""
+def parse_categories(text: str) -> Dict[str, List[str]]:
+    categories = {}
+    current_category = None
+    for line in text.strip().split("\n"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        cat_match = re.match(r"===\s*(.+?)\s*===", line)
+        if cat_match:
+            current_category = cat_match.group(1).strip()
+            categories[current_category] = []
+            continue
+        if line.startswith("http") and ".txt" in line and current_category:
+            categories[current_category].append(line)
+    return categories
+
+
+def categorize_key_category(cat_name: str) -> str:
+    name = cat_name.lower()
+    if "europe" in name or "euro" in name or "🇪🇺" in name:
+        if "fast" in name or "white" in name:
+            return "EU_FAST"
+        return "EU_ALL"
+    if "russia" in name or "ru_" in name or "🇷🇺" in name:
+        if "fast" in name or "white" in name:
+            return "RU_FAST"
+        return "RU_ALL"
+    return "OTHER"
+
+
+def get_category_priority(group: str) -> int:
+    return {"EU_FAST": 1, "RU_FAST": 2, "EU_ALL": 3, "RU_ALL": 4, "OTHER": 5}.get(group, 6)
+
+
+def fetch_keys_from_url(url: str) -> List[str]:
     try:
         resp = robust_session.get(url, timeout=30)
         if resp.status_code != 200:
-            print(f"  ⚠️ HTTP {resp.status_code} — {url.split('/')[-1]}")
             return []
         keys = []
         for line in resp.text.strip().split("\n"):
@@ -62,82 +93,57 @@ def fetch_keys_from_url(url: str) -> list:
                 continue
             if any(line.startswith(p) for p in ["vless://", "vmess://", "trojan://", "ss://", "ssr://"]):
                 keys.append(line)
-        print(f"  ✅ {len(keys)} ключей из {url.split('/')[-1].split('?')[0]}")
         return keys
-    except Exception as e:
-        print(f"  ❌ {url.split('/')[-1]}: {e}")
+    except Exception:
         return []
 
 
-def load_keys() -> list:
-    """Загружает список файлов из subscriptions_list.txt, затем скачивает каждый."""
-    print("📥 Загрузка списка файлов...")
+def load_all_keys() -> List[Tuple[str, str]]:
+    print("📥 Загрузка subscriptions_list.txt...")
     try:
         resp = robust_session.get(SUBSCRIPTIONS_URL, timeout=30)
         if resp.status_code != 200:
-            print(f"❌ Не удалось загрузить список: HTTP {resp.status_code}")
+            print(f"❌ HTTP {resp.status_code}")
             return []
     except Exception as e:
-        print(f"❌ Ошибка загрузки списка: {e}")
+        print(f"❌ {e}")
         return []
 
-    # Парсим URL файлов из subscriptions_list.txt
-    file_urls = []
-    for line in resp.text.strip().split("\n"):
-        line = line.strip()
-        if line.startswith("http") and ".txt" in line:
-            file_urls.append(line)
+    categories = parse_categories(resp.text)
+    print(f"\n📂 Найдено категорий: {len(categories)}")
+    for cat, urls in categories.items():
+        print(f"   {cat}: {len(urls)} файлов")
 
-    print(f"📄 Найдено {len(file_urls)} файлов")
-    print("📥 Скачиваю ключи...")
-
+    cat_list = sorted(categories.items(), key=lambda x: get_category_priority(categorize_key_category(x[0])))
     all_keys = []
-    for url in file_urls:
-        keys = fetch_keys_from_url(url)
-        all_keys.extend(keys)
-
-    # Убираем дубликаты, сохраняем порядок
     seen = set()
-    unique_keys = []
-    for k in all_keys:
-        if k not in seen:
-            seen.add(k)
-            unique_keys.append(k)
 
-    print(f"\n✅ Всего уникальных ключей: {len(unique_keys)}")
-    return unique_keys
+    for cat_name, urls in cat_list:
+        group = categorize_key_category(cat_name)
+        print(f"\n📥 {cat_name} (группа: {group})...")
+        for url in urls:
+            keys = fetch_keys_from_url(url)
+            filename = url.split("/")[-1].split("?")[0]
+            new_count = 0
+            for key in keys:
+                if key not in seen:
+                    seen.add(key)
+                    all_keys.append((key, group))
+                    new_count += 1
+            print(f"   {filename}: {len(keys)} загружено, {new_count} новых")
 
-
-# --- ФАЙЛЫ ---
-def create_keys_file(all_keys):
-    """Создаёт файл с ключами (все, кроме первых 20, которые идут в кнопки)."""
-    date_str = datetime.now().strftime("%Y%m%d_%H%M")
-    filepath = os.path.join(RESULTS_FOLDER, f"keys_{date_str}.txt")
-    os.makedirs(RESULTS_FOLDER, exist_ok=True)
-    # Первые 20 не пишем в файл — они в кнопках
-    file_keys = all_keys[20:]
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(f"# VPN Keys — {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}\n")
-        f.write(f"# Total: {len(all_keys)} | In file: {len(file_keys)} | In buttons: {len(all_keys[:20])}\n\n")
-        for key in file_keys:
-            f.write(key + "\n")
-    return filepath, len(file_keys)
+    print(f"\n✅ Всего уникальных ключей: {len(all_keys)}")
+    return all_keys
 
 
-def safe_remove(filepath: str):
-    try:
-        if os.path.exists(filepath):
-            os.remove(filepath)
-    except OSError as e:
-        print(f"⚠️ Не удалось удалить {filepath}: {e}")
+def chunk_keys(keys: List[Tuple[str, str]]) -> List[List[Tuple[str, str]]]:
+    return [keys[i:i + KEYS_PER_CHUNK] for i in range(0, len(keys), KEYS_PER_CHUNK)]
 
 
-# --- ПРОКСИ ---
 def load_active_proxies(limit=10):
     try:
         resp = robust_session.get(PROXIES_URL, timeout=30)
         if resp.status_code != 200:
-            print(f"⚠️ Не удалось загрузить прокси: HTTP {resp.status_code}")
             return []
         proxies = []
         for line in resp.text.strip().split("\n"):
@@ -146,19 +152,16 @@ def load_active_proxies(limit=10):
                 proxies.append(line)
                 if len(proxies) >= limit:
                     break
-        print(f"✅ Загружено {len(proxies)} прокси")
         return proxies
-    except Exception as e:
-        print(f"❌ Ошибка загрузки прокси: {e}")
+    except Exception:
         return []
 
 
-# --- TELEGRAM ---
-def send_photo_with_file(channel_id, photo_path, file_path, caption="", bot_token=None):
+def send_photo(channel_id, photo_path, caption="", bot_token=None):
     url = f"https://api.telegram.org/bot{bot_token}"
     if DRY_RUN:
-        print(f"\n[DRY_RUN] sendPhoto + sendDocument -> {channel_id}")
-        return {"ok": True}
+        print(f"\n[DRY_RUN] sendPhoto -> {channel_id}")
+        return None
     try:
         with open(photo_path, "rb") as photo:
             r = robust_session.post(
@@ -167,39 +170,9 @@ def send_photo_with_file(channel_id, photo_path, file_path, caption="", bot_toke
                 files={"photo": photo},
                 timeout=60,
             )
-            photo_result = r.json()
-        if photo_result.get("ok"):
-            msg_id = photo_result["result"]["message_id"]
-            with open(file_path, "rb") as doc:
-                r = robust_session.post(
-                    f"{url}/sendDocument",
-                    data={"chat_id": channel_id, "reply_to_message_id": msg_id},
-                    files={"document": doc},
-                    timeout=120,
-                )
-                return r.json()
-        return photo_result
-    except Exception as e:
-        print(f"❌ Ошибка отправки: {e}")
-        return None
-
-
-def send_document(chat_id, file_path, caption="", bot_token=None):
-    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
-    if DRY_RUN:
-        print(f"\n[DRY_RUN] sendDocument -> {chat_id}")
-        return {"ok": True}
-    try:
-        with open(file_path, "rb") as f:
-            r = robust_session.post(
-                url,
-                data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
-                files={"document": f},
-                timeout=60,
-            )
             return r.json()
     except Exception as e:
-        print(f"❌ Ошибка отправки документа: {e}")
+        print(f"❌ Ошибка фото: {e}")
         return None
 
 
@@ -220,110 +193,106 @@ def send_message(channel_id, text, bot_token, reply_markup=None):
         r = robust_session.post(url, json=payload, timeout=30)
         return r.json()
     except Exception as e:
-        print(f"❌ Ошибка отправки сообщения: {e}")
+        print(f"❌ Ошибка сообщения: {e}")
         return None
 
 
-# --- MAIN ---
+def build_keyboard(keys: List[Tuple[str, str]], offset: int) -> dict:
+    keyboard = []
+    row = []
+    for i, (key, group) in enumerate(keys, start=offset + 1):
+        row.append({"text": f"🔑 {i}", "copy_text": {"text": key}})
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    return {"inline_keyboard": keyboard}
+
+
 def main():
     if not BOT_TOKEN or not CHANNEL_ID:
         print("❌ Не установлены TELEGRAM_BOT_TOKEN или TELEGRAM_PRIVATE_CHANNEL")
         return 1
 
     print("\n" + "=" * 70)
-    print(" " * 20 + "📤 PRIVATE TELEGRAM POSTER")
+    print(" " * 20 + "📤 PRIVATE TELEGRAM POSTER v2")
     print("=" * 70 + "\n")
 
     if DRY_RUN:
         print("⚙️ Режим DRY_RUN\n")
 
-    # 1. Загружаем ключи
-    print("📥 Загрузка ключей...")
-    all_keys = load_keys()
+    all_keys = load_all_keys()
     if not all_keys:
-        print("❌ Нет ключей для публикации")
+        print("❌ Нет ключей")
         return 1
 
     total = len(all_keys)
-    button_keys = all_keys[:20]
-    file_keys = all_keys[20:]
+    chunks = chunk_keys(all_keys)
+    print(f"\n📦 Всего: {total} ключей")
+    print(f"📨 Чанков по {KEYS_PER_CHUNK}: {len(chunks)}")
 
-    print(f"📦 Всего: {total} ключей")
-    print(f"🔘 В кнопки: {len(button_keys)}")
-    print(f"📄 В файл: {len(file_keys)}")
-
-    # 2. Создаём файл с остальными ключами
-    private_file, private_count = create_keys_file(all_keys)
-
-    # 3. Загружаем прокси
     proxies = load_active_proxies(limit=10)
-
-    # 4. Формируем клавиатуру с ключами (первые 20)
-    keys_keyboard = []
-    row = []
-    for i, key in enumerate(button_keys, start=1):
-        short = key[:40] + ("..." if len(key) > 40 else "")
-        row.append({"text": f"🔑 {i}", "copy_text": {"text": key}})
-        if len(row) == 2:
-            keys_keyboard.append(row)
-            row = []
-    if row:
-        keys_keyboard.append(row)
-
-    # 5. Формируем клавиатуру с прокси
-    proxies_keyboard = []
+    proxies_keyboard = None
     if proxies:
+        keyboard = []
         row = []
-        for i, proxy in enumerate(proxies, start=1):
-            row.append({"text": f"📡 Прокси {i}", "copy_text": {"text": proxy}})
+        for i, p in enumerate(proxies, start=1):
+            row.append({"text": f"📡 Прокси {i}", "copy_text": {"text": p}})
             if len(row) == 2:
-                proxies_keyboard.append(row)
+                keyboard.append(row)
                 row = []
         if row:
-            proxies_keyboard.append(row)
+            keyboard.append(row)
+        proxies_keyboard = {"inline_keyboard": keyboard}
 
-    # 6. Отправка
-    print("\n" + "=" * 70)
-    print(f"🔒 Канал: {CHANNEL_ID}")
-    print("=" * 70 + "\n")
+    print(f"\n🔒 Канал: {CHANNEL_ID}\n")
 
-    # Пост с обложкой + файлом ключей
     caption = (
         f"🔐 <b>VPN-ключи</b>\n\n"
         f"📅 <code>{datetime.now().strftime('%Y-%m-%d %H:%M')}</code>\n"
         f"📊 Всего: <b>{total}</b> ключей\n"
-        f"🔘 В кнопках: <b>{len(button_keys)}</b>\n"
-        f"📄 В файле: <b>{private_count}</b>\n\n"
+        f"📨 Сообщений: <b>{len(chunks)}</b>\n\n"
         f"📡 VLESS | VMess | Trojan | SS"
     )
-
     if os.path.exists(COVER):
-        send_photo_with_file(CHANNEL_ID, COVER, private_file, caption, BOT_TOKEN)
+        send_photo(CHANNEL_ID, COVER, caption, BOT_TOKEN)
     else:
-        print("⚠️ Нет обложки, отправляю только файл")
-        send_document(CHANNEL_ID, private_file, caption, BOT_TOKEN)
+        send_message(CHANNEL_ID, caption, BOT_TOKEN)
 
-    safe_remove(private_file)
+    time.sleep(1)
 
-    # Кнопки с ключами (первые 20)
-    if keys_keyboard:
-        send_message(
-            CHANNEL_ID,
-            "🔑 <b>Первые 20 ключей</b>\n\nНажми на кнопку — ключ скопируется в буфер.",
-            BOT_TOKEN,
-            {"inline_keyboard": keys_keyboard},
-        )
+    global_offset = 0
+    for idx, chunk in enumerate(chunks):
+        groups = set(g for _, g in chunk)
+        if "EU_FAST" in groups:
+            emoji = "🇪🇺⚡"
+        elif "RU_FAST" in groups:
+            emoji = "🇷🇺⚡"
+        elif "EU_ALL" in groups:
+            emoji = "🇪🇺"
+        elif "RU_ALL" in groups:
+            emoji = "🇷🇺"
+        else:
+            emoji = "🌍"
 
-    # Кнопки с прокси
+        chunk_start = global_offset + 1
+        chunk_end = global_offset + len(chunk)
+        text = f"{emoji} <b>Ключи {chunk_start}-{chunk_end}</b>\nНажми на кнопку — ключ скопируется в буфер."
+        keyboard = build_keyboard(chunk, global_offset)
+        send_message(CHANNEL_ID, text, BOT_TOKEN, keyboard)
+        global_offset += len(chunk)
+        time.sleep(0.5)
+
     if proxies_keyboard:
         send_message(
             CHANNEL_ID,
-            "📡 <b>Активные прокси для Telegram</b>\n\nНажми на кнопку — скопируется ссылка.",
+            "📡 <b>Активные прокси для Telegram</b>",
             BOT_TOKEN,
-            {"inline_keyboard": proxies_keyboard},
+            proxies_keyboard,
         )
 
-    print("\n✅ Скрипт завершён")
+    print("\n✅ Готово")
     return 0
 
 
