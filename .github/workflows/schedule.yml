@@ -1,0 +1,21 @@
+name: Private Poster
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'     # каждые 2 часа
+  workflow_dispatch:           # ручной запуск
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install -r requirements.txt
+      - run: python poster_private.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_PRIVATE_CHANNEL: ${{ secrets.TELEGRAM_PRIVATE_CHANNEL }}
+          TELEGRAM_DRY_RUN: ${{ secrets.TELEGRAM_DRY_RUN }}
