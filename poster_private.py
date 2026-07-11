@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""VIP key poster - categories, 100 per chunk, no proxy"""
+"""VIP key poster - 20 buttons, rest in file by 1000"""
 import os, sys, requests, re, time
 from datetime import datetime
 from requests.adapters import HTTPAdapter
@@ -15,7 +15,7 @@ BOT = os.environ.get('TELEGRAM_BOT_TOKEN')
 CHAN = os.environ.get('TELEGRAM_PRIVATE_CHANNEL')
 COVER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cover_private.jpg')
 SUBURL = 'https://raw.githubusercontent.com/kort0881/vpn-checker-backend/refs/heads/main/checked/subscriptions_list.txt'
-CHUNK = 100
+CHUNK = 1000
 
 def parsecats(t):
     cats, cur = {}, None
@@ -90,13 +90,28 @@ def sendmsg(ch, text, bot, markup=None):
         s.post(f'https://api.telegram.org/bot{bot}/sendMessage', json=p, timeout=30)
     except: pass
 
-def buildkbd(keys, off):
+def senddoc(ch, fp, cap='', bot=None):
+    if DRY: print(f'[DRY] doc {ch}'); return
+    try:
+        with open(fp, 'rb') as f:
+            s.post(f'https://api.telegram.org/bot{bot}/sendDocument',
+                data={'chat_id': ch, 'caption': cap, 'parse_mode': 'HTML'}, files={'document': f}, timeout=120)
+    except: pass
+
+def buildkbd(keys):
     kbd, row = [], []
-    for i, (k, _) in enumerate(keys, off+1):
+    for i, (k, _) in enumerate(keys, 1):
         row.append({'text': f'🔑 {i}', 'copy_text': {'text': k}})
         if len(row) == 2: kbd.append(row); row = []
     if row: kbd.append(row)
     return {'inline_keyboard': kbd}
+
+def writekeysfile(keys, num):
+    fn = f'/tmp/keys_part{num}.txt'
+    with open(fn, 'w') as f:
+        for k, _ in keys:
+            f.write(k + '\n')
+    return fn
 
 def main():
     if not BOT or not CHAN: print('No TOKEN/CHANNEL'); return 1
@@ -104,22 +119,23 @@ def main():
     if DRY: print('DRY RUN\n')
     ak = loadkeys()
     if not ak: print('No keys'); return 1
-    cs = chunkkeys(ak)
-    print(f'\n{len(ak)} keys, {len(cs)} chunks\n')
-    cap = f'VPN keys\n{datetime.now().strftime("%Y-%m-%d %H:%M")}\nTotal: {len(ak)}'
+    total = len(ak)
+    btns = ak[:20]
+    rest = ak[20:]
+    files = chunkkeys(rest)
+    print(f'\n{total} keys: {len(btns)} buttons, {len(files)} files x {CHUNK}')
+    cap = f'VPN keys\n{datetime.now().strftime("%Y-%m-%d %H:%M")}\nTotal: {total}\nButtons: {len(btns)}'
     if os.path.exists(COVER): sendphoto(CHAN, COVER, cap, BOT)
     else: sendmsg(CHAN, cap, BOT)
     time.sleep(1)
-    off = 0
-    for c in cs:
-        gs = set(g for _,g in c)
-        if 'EF' in gs: em = 'EU'
-        elif 'RF' in gs: em = 'RU'
-        elif 'EA' in gs: em = 'EU'
-        elif 'RA' in gs: em = 'RU'
-        else: em = 'GL'
-        sendmsg(CHAN, f'{em} Keys {off+1}-{off+len(c)}', BOT, buildkbd(c, off))
-        off += len(c); time.sleep(0.5)
+    if btns:
+        sendmsg(CHAN, f'Top {len(btns)} keys', BOT, buildkbd(btns))
+        time.sleep(0.5)
+    for i, chunk in enumerate(files, 1):
+        fp = writekeysfile(chunk, i)
+        senddoc(CHAN, fp, f'Keys part {i} ({(i-1)*CHUNK+21}-{(i-1)*CHUNK+len(chunk)+20})', BOT)
+        os.remove(fp)
+        time.sleep(0.5)
     print('Done'); return 0
 
 if __name__ == '__main__': sys.exit(main())
