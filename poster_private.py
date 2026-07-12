@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — по ТЗ: TCP-проверка, регионы, файлы в checked/, кнопки-ссылки
-
-Что делает:
-  - Загружает ключи из SOURCE_URL (all_new.txt)
-  - Очищает мусор, удаляет дубликаты
-  - Заменяет домены на единый адрес dostyp_k_internety
-  - Проверяет работоспособность TCP-соединением (5 сек таймаут)
-  - Группирует по регионам (Europe/Asia/USA/Russia/Other)
-  - Сортирует по задержке внутри группы
-  - Разбивает на чанки по 100 ключей
-  - Создаёт файлы {Регион}_part{N}_sub.txt
-  - Пушит в checked/ репозитория
-  - Отправляет в Telegram: обложка + кнопки-ссылки на каждый файл
+PRIVATE VPN POSTER — исправленная версия:
+- регион определяется ДО замены домена
+- TCP-проверка ДО замены
+- замена выполняется только перед записью в файлы
 """
 import os, sys, re, time, socket, tempfile, shutil, subprocess
 from datetime import datetime
@@ -36,7 +27,7 @@ REPO_NAME = "vpn-private-poster"
 BRANCH = "main"
 CHECKED_DIR = "checked"
 
-# Маппинг TLD → регион
+# Маппинг TLD → регион (для исходных доменов)
 TLD_REGION = {
     "de": "Europe", "fr": "Europe", "nl": "Europe", "uk": "Europe",
     "it": "Europe", "es": "Europe", "se": "Europe", "no": "Europe",
@@ -68,7 +59,7 @@ COVER_PATH = os.path.join(SCRIPT_DIR, "cover_private.jpg")
 
 
 # ═══════════════════════════════════════════════════════════════
-#  1. Загрузка и очистка ключей
+#  1. Загрузка и очистка (БЕЗ замены домена)
 # ═══════════════════════════════════════════════════════════════
 
 def fetch_raw_keys(url):
@@ -88,13 +79,41 @@ def fetch_raw_keys(url):
 def clean_key(raw):
     """Очистка строки: обрезка, удаление хвостов (пробел, #, |, таб)."""
     k = raw.strip()
-    # Удаляем всё после первого пробела, #, | или табуляции
     k = re.split(r"[ \t#|]", k, maxsplit=1)[0].strip()
     return k
 
 
+def is_probably_key(line):
+    protocols = ("vless://", "vmess://", "trojan://", "ss://", "ssr://")
+    return any(line.startswith(p) for p in protocols)
+
+
+def load_and_clean():
+    """Загрузка, очистка, дедупликация (без замены домена)."""
+    raw = fetch_raw_keys(SOURCE_URL)
+    if not raw:
+        return []
+
+    seen = OrderedDict()
+    for line in raw:
+        k = clean_key(line)
+        if not k or not is_probably_key(k):
+            continue
+        if k in seen:
+            continue
+        seen[k] = True
+
+    keys = list(seen.keys())
+    print(f"✅ После очистки и дедупликации: {len(keys)} уникальных ключей")
+    return keys
+
+
+# ═══════════════════════════════════════════════════════════════
+#  2. Вспомогательные функции для работы с ключами
+# ═══════════════════════════════════════════════════════════════
+
 def extract_host_port(key):
-    """Извлечение хоста и порта из ключа любого протокола."""
+    """Извлечение хоста и порта из ключа (по исходному формату)."""
     try:
         parsed = urlparse(key)
         host = parsed.hostname
@@ -104,7 +123,7 @@ def extract_host_port(key):
     except Exception:
         pass
 
-    # fallback: @host:port
+    # @host:port
     m = re.search(r"@([^:]+):(\d+)", key)
     if m:
         return m.group(1), int(m.group(2))
@@ -120,50 +139,29 @@ def extract_host_port(key):
 
 
 def replace_hosts_in_key(key, new_host):
-    """Замена всех вхождений хостов на единый адрес."""
-    # Замена @host:port → @dostyp_k_internety:port
+    """Замена всех вхождений хостов на единый адрес (для финальных файлов)."""
     key = re.sub(r"@([^:@\s]+)", f"@{new_host}", key)
-    # Замена server=host → server=new_host, add=host → add=new_host
     key = re.sub(r"(server|add)=([^&\s]+)", rf"\1={new_host}", key)
     return key
 
 
-def is_probably_key(line):
-    """Проверка, похожа ли строка на ключ."""
-    protocols = ("vless://", "vmess://", "trojan://", "ss://", "ssr://")
-    return any(line.startswith(p) for p in protocols)
-
-
-def load_and_clean():
-    """Полный цикл загрузки, очистки, дедупликации и замены домена."""
-    raw = fetch_raw_keys(SOURCE_URL)
-    if not raw:
-        return []
-
-    seen = OrderedDict()
-
-    for line in raw:
-        k = clean_key(line)
-        if not k or not is_probably_key(k):
-            continue
-        # Замена домена
-        k = replace_hosts_in_key(k, REPLACE_HOST)
-        # Дедупликация с сохранением порядка
-        if k in seen:
-            continue
-        seen[k] = True
-
-    cleaned = list(seen.keys())
-    print(f"✅ После очистки и дедупликации: {len(cleaned)} уникальных ключей")
-    return cleaned
+def get_region_from_key(key):
+    """Определение региона по TLD хоста (исходный ключ)."""
+    host, _ = extract_host_port(key)
+    if not host:
+        return "Other"
+    parts = host.lower().split(".")
+    if len(parts) >= 2:
+        tld = parts[-1]
+        return TLD_REGION.get(tld, "Other")
+    return "Other"
 
 
 # ═══════════════════════════════════════════════════════════════
-#  2. TCP-проверка
+#  3. TCP-проверка
 # ═══════════════════════════════════════════════════════════════
 
 def tcp_check(host, port, timeout=TCP_TIMEOUT):
-    """TCP-соединение, возвращает задержку в секундах или None."""
     try:
         ip = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -178,20 +176,21 @@ def tcp_check(host, port, timeout=TCP_TIMEOUT):
 
 
 def check_keys(keys):
-    """Прогон TCP-проверки по всем ключам."""
+    """Прогон TCP-проверки по исходным ключам."""
     total = len(keys)
-    working = []
+    working = []   # (key_original, rtt, region)
     print(f"\n🔍 Проверка ключей (TCP ping, таймаут {TCP_TIMEOUT} сек)...")
     for idx, key in enumerate(keys, 1):
         host, port = extract_host_port(key)
         if not host or not port:
-            print(f"  [{idx}/{total}] ⚠️  не удалось извлечь хост/порт, пропущен")
+            print(f"  [{idx}/{total}] ⚠️ не удалось извлечь хост/порт, пропущен")
             continue
         rtt = tcp_check(host, port)
         if rtt is not None:
-            working.append((key, rtt))
+            region = get_region_from_key(key)
+            working.append((key, rtt, region))
             rtt_ms = round(rtt * 1000, 1)
-            print(f"  [{idx}/{total}] ✅ {rtt_ms} мс")
+            print(f"  [{idx}/{total}] ✅ {rtt_ms} мс ({region})")
         else:
             print(f"  [{idx}/{total}] ❌ не работает")
     print(f"\n✅ Рабочих ключей: {len(working)} из {total}")
@@ -199,49 +198,27 @@ def check_keys(keys):
 
 
 # ═══════════════════════════════════════════════════════════════
-#  3. Группировка по регионам
+#  4. Группировка и сортировка
 # ═══════════════════════════════════════════════════════════════
 
-def extract_tld(host):
-    """Извлечение домена верхнего уровня из хоста."""
-    if not host:
-        return None
-    parts = host.lower().split(".")
-    if len(parts) >= 2:
-        return parts[-1]
-    return None
-
-
-def get_region(key):
-    """Определение региона ключа по TLD хоста."""
-    host, _ = extract_host_port(key)
-    tld = extract_tld(host)
-    if tld:
-        return TLD_REGION.get(tld, "Other")
-    return "Other"
-
-
-def group_by_region(keys_with_rtt):
+def group_and_sort(working):
     """
-    keys_with_rtt: list of (key, rtt)
-    Возвращает OrderedDict: {region: [(key, rtt), ...]}
-    Каждая группа отсортирована по возрастанию RTT.
+    working: list of (key_original, rtt, region)
+    Возвращает OrderedDict: {region: [(key_original, rtt), ...]}
+    Уже отсортировано по RTT внутри группы.
     """
     groups = OrderedDict()
     for r in REGION_ORDER:
         groups[r] = []
 
-    for key, rtt in keys_with_rtt:
-        region = get_region(key)
+    for key, rtt, region in working:
         if region not in groups:
             region = "Other"
         groups[region].append((key, rtt))
 
-    # Сортировка внутри групп по RTT
     for region in groups:
         groups[region].sort(key=lambda x: x[1])
 
-    # Статистика
     print("\n📊 По регионам:")
     for region in REGION_ORDER:
         cnt = len(groups[region])
@@ -255,27 +232,30 @@ def group_by_region(keys_with_rtt):
 
 
 # ═══════════════════════════════════════════════════════════════
-#  4. Разбивка на чанки и создание файлов
+#  5. Создание файлов с ЗАМЕНЁННЫМИ ключами
 # ═══════════════════════════════════════════════════════════════
 
 def chunk_list(lst, size):
-    """Разбить список на части по size элементов."""
     return [lst[i:i+size] for i in range(0, len(lst), size)]
 
 
 def create_subscription_files(groups, output_dir):
     """
-    Создаёт файлы {Регион}_part{N}_sub.txt в output_dir.
-    Возвращает список: [(filename, region, part_num, key_count), ...]
+    Принимает groups: {region: [(key_original, rtt), ...]}
+    Заменяет домен в каждом ключе, разбивает на чанки, создаёт файлы.
     """
     os.makedirs(output_dir, exist_ok=True)
     file_meta = []
 
     for region in REGION_ORDER:
-        keys = groups.get(region, [])
-        if not keys:
+        items = groups.get(region, [])
+        if not items:
             continue
-        chunks = chunk_list([k for k, _ in keys], CHUNK_SIZE)
+        # Заменяем домен в каждом ключе перед записью
+        original_keys = [k for k, _ in items]
+        replaced_keys = [replace_hosts_in_key(k, REPLACE_HOST) for k in original_keys]
+
+        chunks = chunk_list(replaced_keys, CHUNK_SIZE)
         for part_num, chunk in enumerate(chunks, 1):
             fname = f"{region}_part{part_num}_sub.txt"
             fpath = os.path.join(output_dir, fname)
@@ -291,13 +271,11 @@ def create_subscription_files(groups, output_dir):
 
 
 # ═══════════════════════════════════════════════════════════════
-#  5. Git: клонирование + пуш в checked/
+#  6. Git: клонирование + пуш в checked/
 # ═══════════════════════════════════════════════════════════════
 
 def push_to_repo(local_dir, file_meta):
-    """Клонировать репозиторий, копировать файлы в checked/, пуш."""
     repo_url = f"https://kort0881:{GH_TOKEN}@github.com/{REPO_OWNER}/{REPO_NAME}.git"
-
     print(f"\n📦 Клонирование {REPO_OWNER}/{REPO_NAME}...")
     clone_dir = os.path.join(local_dir, "repo_clone")
     if os.path.exists(clone_dir):
@@ -311,7 +289,6 @@ def push_to_repo(local_dir, file_meta):
         print(f"❌ Ошибка клонирования: {result.stderr.strip()}")
         return False
 
-    # Копируем файлы в checked/
     checked_path = os.path.join(clone_dir, CHECKED_DIR)
     os.makedirs(checked_path, exist_ok=True)
 
@@ -320,11 +297,7 @@ def push_to_repo(local_dir, file_meta):
         dst = os.path.join(checked_path, fname)
         shutil.copy2(src, dst)
 
-    # Git: add, commit, push
-    subprocess.run(
-        ["git", "add", "-A"],
-        cwd=clone_dir, capture_output=True, timeout=30
-    )
+    subprocess.run(["git", "add", "-A"], cwd=clone_dir, capture_output=True, timeout=30)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
     commit_result = subprocess.run(
         ["git", "commit", "-m", f"Auto update subscription files — {ts}"],
@@ -353,7 +326,7 @@ def push_to_repo(local_dir, file_meta):
 
 
 # ═══════════════════════════════════════════════════════════════
-#  6. Telegram: отправка
+#  7. Telegram: отправка
 # ═══════════════════════════════════════════════════════════════
 
 def send_photo(chat_id, photo_path, caption, bot_token):
@@ -364,11 +337,7 @@ def send_photo(chat_id, photo_path, caption, bot_token):
         with open(photo_path, "rb") as ph:
             r = _sess.post(
                 f"https://api.telegram.org/bot{bot_token}/sendPhoto",
-                data={
-                    "chat_id": chat_id,
-                    "caption": caption,
-                    "parse_mode": "HTML",
-                },
+                data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
                 files={"photo": ph},
                 timeout=60,
             )
@@ -411,43 +380,26 @@ def send_message(chat_id, text, bot_token, reply_markup=None):
 
 
 def build_keyboard(file_meta):
-    """
-    Строит inline-клавиатуру.
-    Каждая кнопка копирует в буфер прямую ссылку на файл на GitHub.
-    Используем callback_data как хранилище ссылки (Telegram не поддерживает
-    copy_text на кнопках, только через switch_inline_query — используем
-    URL-кнопки с callback_data, пользователь получает ссылку через callback).
-    """
     kb_rows = []
     current_row = []
-
     for fname, region, part_num, _ in file_meta:
         url = (
             f"https://raw.githubusercontent.com/"
             f"{REPO_OWNER}/{REPO_NAME}/{BRANCH}/{CHECKED_DIR}/{fname}"
         )
         label = f"📥 {region} (part {part_num})"
-        # Обрезка до ~30 символов (лимит кнопки)
         if len(label) > 32:
             label = label[:29] + ".."
-
-        current_row.append({
-            "text": label,
-            "url": url,
-        })
-
+        current_row.append({"text": label, "url": url})
         if len(current_row) == 2:
             kb_rows.append(current_row)
             current_row = []
-
     if current_row:
         kb_rows.append(current_row)
-
     return {"inline_keyboard": kb_rows}
 
 
 def send_telegram(file_meta, total_keys):
-    """Отправка обложки + сообщений с кнопками."""
     if not BOT_TOKEN or not CHANNEL_ID:
         print("⚠️  TELEGRAM_BOT_TOKEN или TELEGRAM_PRIVATE_CHANNEL не заданы")
         return False
@@ -460,7 +412,6 @@ def send_telegram(file_meta, total_keys):
         f"📁 Файлов: {len(file_meta)}"
     )
 
-    # Обложка
     time.sleep(1)
     if os.path.exists(COVER_PATH):
         ok = send_photo(CHANNEL_ID, COVER_PATH, caption, BOT_TOKEN)
@@ -469,11 +420,8 @@ def send_telegram(file_meta, total_keys):
         ok = send_message(CHANNEL_ID, caption, BOT_TOKEN)
         print(f"📝 Сообщение-обложка отправлено: {ok}")
 
-    # Кнопки (макс 100 кнопок на сообщение)
     keyboard = build_keyboard(file_meta)
     all_buttons = keyboard["inline_keyboard"]
-
-    # Разбиваем по 100 кнопок (50 рядов по 2)
     max_buttons_per_msg = 100
     button_batches = []
     current_batch = []
@@ -504,33 +452,33 @@ def send_telegram(file_meta, total_keys):
 
 
 # ═══════════════════════════════════════════════════════════════
-#  7. Main
+#  8. Main
 # ═══════════════════════════════════════════════════════════════
 
 def main():
-    version = "PRIVATE POSTER v23"
+    version = "PRIVATE POSTER v24 (FIXED: region before replace, TCP before replace)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     if DRY:
         print("    no posts, no pushes")
     print(f"{'='*50}\n")
 
-    # 1. Загрузка и очистка
+    # 1. Загрузка и очистка (без замены)
     keys = load_and_clean()
     if not keys:
         print("❌ Нет ключей для обработки")
         return 1
 
-    # 2. TCP-проверка
+    # 2. TCP-проверка (по исходным ключам)
     working = check_keys(keys)
     if not working:
         print("❌ Нет рабочих ключей")
         return 1
 
-    # 3. Группировка по регионам
-    groups = group_by_region(working)
+    # 3. Группировка и сортировка по регионам
+    groups = group_and_sort(working)
 
-    # 4. Создание файлов
+    # 4. Создание файлов (замена домена происходит внутри)
     with tempfile.TemporaryDirectory(prefix="vpn_poster_") as tmpdir:
         file_meta = create_subscription_files(groups, tmpdir)
 
@@ -538,7 +486,7 @@ def main():
             print("❌ Нет файлов для публикации")
             return 1
 
-        # 5. Пуш на GitHub
+        # 5. Пуш на GitHub (если не DRY)
         if DRY:
             print(f"\n[DRY] Пропускаем клонирование и пуш. Файлы во временной папке {tmpdir}")
         else:
@@ -550,7 +498,7 @@ def main():
                 print("❌ Ошибка пуша в репозиторий")
                 return 1
 
-        # 6. Telegram
+        # 6. Telegram (если не DRY)
         total_keys = sum(cnt for _, _, _, cnt in file_meta)
         if DRY:
             print(f"\n[DRY] Пропускаем отправку в Telegram.")
