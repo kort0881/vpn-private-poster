@@ -19,3 +19,4 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_PRIVATE_CHANNEL: ${{ secrets.TELEGRAM_PRIVATE_CHANNEL }}
           TELEGRAM_DRY_RUN: ${{ secrets.TELEGRAM_DRY_RUN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
