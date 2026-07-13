@@ -2,19 +2,19 @@ name: Private Poster
 
 on:
   schedule:
-    - cron: '0 */2 * * *'     # каждые 2 часа
-  workflow_dispatch:           # ручной запуск
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
 
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 15        # защита от бесконечного выполнения
+    timeout-minutes: 15
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0       # нужен для git операций
+          fetch-depth: 0
       
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -30,6 +30,6 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_PRIVATE_CHANNEL: ${{ secrets.TELEGRAM_PRIVATE_CHANNEL }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          TELEGRAM_DRY_RUN: "0"   # 0 = боевой режим
+          GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}   # ← ИСПРАВЛЕНО!
+          TELEGRAM_DRY_RUN: "0"
         run: python poster_private.py
