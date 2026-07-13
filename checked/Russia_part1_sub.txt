@@ -1,4 +1,4 @@
 ss://0c6b632a-cd96-4b74-9b51-151e3b5697db@dostyp_k_internety:2083?encryption=none&amp;security=tls&amp;serviceName=grpc&amp;type=grpc
-ss://4480161e-2c59-4d37-8736-675c9af32bf1@dostyp_k_internety:40443?security=reality&encryption=none&pbk=fWzCKXwvMXaacsl1DdFb1vKQ9l9cTK1G7udqmaYHL0Y&headerType=none&fp=qq&type=tcp&flow=xtls-rprx-vision&sni=deepl.com&sid=01d1bf2d4755d40c
 ss://4bf5a71c-d726-4585-b095-7396675706d5@dostyp_k_internety:40443?security=reality&encryption=none&pbk=D_ks4Yyk4-osnWBxCFvd0_UEgohUXvR2zJoWQg1CACU&headerType=none&fp=qq&type=tcp&flow=xtls-rprx-vision&sni=deepl.com&sid=c84f
+ss://4480161e-2c59-4d37-8736-675c9af32bf1@dostyp_k_internety:40443?security=reality&encryption=none&pbk=fWzCKXwvMXaacsl1DdFb1vKQ9l9cTK1G7udqmaYHL0Y&headerType=none&fp=qq&type=tcp&flow=xtls-rprx-vision&sni=deepl.com&sid=01d1bf2d4755d40c
 ss://14400b5d-a218-4ed0-b4a9-d703a3501911@dostyp_k_internety:14368?path=%2F&amp;security=tls&amp;encryption=none&amp;insecure=0&amp;host=max-ep.443.erangle.ru&amp;fp=chrome&amp;type=httpupgrade&amp;allowInsecure=0&amp;sni=max-ep.443.erangle.ru
