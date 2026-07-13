@@ -26,10 +26,15 @@ jobs:
           pip install --upgrade pip
           pip install requests urllib3
       
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+      
       - name: Run private poster
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_PRIVATE_CHANNEL: ${{ secrets.TELEGRAM_PRIVATE_CHANNEL }}
-          GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}   # ← ИСПРАВЛЕНО!
+          GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}
           TELEGRAM_DRY_RUN: "0"
         run: python poster_private.py
