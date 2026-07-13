@@ -8,15 +8,28 @@ on:
 jobs:
   post:
     runs-on: ubuntu-latest
+    timeout-minutes: 15        # защита от бесконечного выполнения
+    
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # нужен для git операций
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - run: pip install -r requirements.txt
-      - run: python poster_private.py
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install requests urllib3
+      
+      - name: Run private poster
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_PRIVATE_CHANNEL: ${{ secrets.TELEGRAM_PRIVATE_CHANNEL }}
-          TELEGRAM_DRY_RUN: ${{ secrets.TELEGRAM_DRY_RUN }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          TELEGRAM_DRY_RUN: "0"   # 0 = боевой режим
+        run: python poster_private.py
