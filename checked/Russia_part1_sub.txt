@@ -1,3 +1,1 @@
-ss://0c6b632a-cd96-4b74-9b51-151e3b5697db@dostyp_k_internety:2083?encryption=none&amp;security=tls&amp;serviceName=grpc&amp;type=grpc
-ss://0c6b632a-cd96-4b74-9b51-151e3b5697db@dostyp_k_internety:2083?encryption=none&security=tls&serviceName=grpc&type=grpc
-ss://14400b5d-a218-4ed0-b4a9-d703a3501911@dostyp_k_internety:14368?path=%2F&amp;security=tls&amp;encryption=none&amp;insecure=0&amp;host=max-ep.443.erangle.ru&amp;fp=chrome&amp;type=httpupgrade&amp;allowInsecure=0&amp;sni=max-ep.443.erangle.ru
+ss://01ea3b87-b7b1-4aef-b24a-9c43fbd3b26f@dostyp_k_internety:443?security=tls&amp;encryption=none&amp;insecure=0&amp;headerType=none&amp;fp=random&amp;type=tcp&amp;allowInsecure=0&amp;flow=xtls-rprx-vision&amp;sni=sub.sbrf-cdn342.ru
