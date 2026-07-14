@@ -22,16 +22,15 @@ SOURCE_URL = (
     "vpn-vless-configs-russia/refs/heads/main/data/githubmirror/new/all_new.txt"
 )
 REPLACE_HOST = "dostyp_k_internety"
-TCP_TIMEOUT = 2.0  # УМЕНЬШЕНО с 5 до 2 секунд
-MAX_KEYS_TO_CHECK = 200  # ОГРАНИЧЕНИЕ: проверяем только 200 ключей
-MAX_WORKERS = 30  # Количество параллельных потоков
+TCP_TIMEOUT = 2.0
+MAX_KEYS_TO_CHECK = 200
+MAX_WORKERS = 30
 CHUNK_SIZE = 100
 REPO_OWNER = "kort0881"
 REPO_NAME = "vpn-private-poster"
 BRANCH = "main"
 CHECKED_DIR = "checked"
 
-# Маппинг TLD → регион
 TLD_REGION = {
     "de": "Europe", "fr": "Europe", "nl": "Europe", "uk": "Europe",
     "it": "Europe", "es": "Europe", "se": "Europe", "no": "Europe",
@@ -47,13 +46,11 @@ TLD_REGION = {
 
 REGION_ORDER = ["Europe", "Asia", "USA", "Russia", "Other"]
 
-# ── Сессия ───────────────────────────────────────────────────
 _sess = requests.Session()
 _r = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
 _sess.mount("http://", HTTPAdapter(max_retries=_r))
 _sess.mount("https://", HTTPAdapter(max_retries=_r))
 
-# ── Конфигурация из env ─────────────────────────────────────
 DRY = os.environ.get("TELEGRAM_DRY_RUN", "0") == "1"
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.environ.get("TELEGRAM_PRIVATE_CHANNEL")
@@ -62,12 +59,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 COVER_PATH = os.path.join(SCRIPT_DIR, "cover_private.jpg")
 
 
-# ═══════════════════════════════════════════════════════════════
-#  1. Загрузка и очистка
-# ═══════════════════════════════════════════════════════════════
-
 def fetch_raw_keys(url):
-    """Загрузка сырых строк из источника."""
     print(f"\n📥 Загрузка ключей из {url}...")
     try:
         r = _sess.get(url, timeout=30)
@@ -81,7 +73,6 @@ def fetch_raw_keys(url):
 
 
 def clean_key(raw):
-    """Очистка строки."""
     k = raw.strip()
     k = re.split(r"[ \t#|]", k, maxsplit=1)[0].strip()
     return k
@@ -93,7 +84,6 @@ def is_probably_key(line):
 
 
 def load_and_clean():
-    """Загрузка, очистка, дедупликация."""
     raw = fetch_raw_keys(SOURCE_URL)
     if not raw:
         return []
@@ -108,22 +98,14 @@ def load_and_clean():
         seen[k] = True
 
     keys = list(seen.keys())
-    
-    # Ограничиваем количество ключей для проверки
     if len(keys) > MAX_KEYS_TO_CHECK:
         print(f"⚠️  Слишком много ключей ({len(keys)}), проверяем только {MAX_KEYS_TO_CHECK}")
         keys = keys[:MAX_KEYS_TO_CHECK]
-    
     print(f"✅ После очистки и дедупликации: {len(keys)} уникальных ключей")
     return keys
 
 
-# ═══════════════════════════════════════════════════════════════
-#  2. Вспомогательные функции
-# ═══════════════════════════════════════════════════════════════
-
 def extract_host_port(key):
-    """Извлечение хоста и порта из ключа."""
     try:
         parsed = urlparse(key)
         host = parsed.hostname
@@ -147,14 +129,12 @@ def extract_host_port(key):
 
 
 def replace_hosts_in_key(key, new_host):
-    """Замена хостов на единый адрес."""
     key = re.sub(r"@([^:@\s]+)", f"@{new_host}", key)
     key = re.sub(r"(server|add)=([^&\s]+)", rf"\1={new_host}", key)
     return key
 
 
 def get_region_from_key(key):
-    """Определение региона по TLD хоста."""
     host, _ = extract_host_port(key)
     if not host:
         return "Other"
@@ -165,12 +145,7 @@ def get_region_from_key(key):
     return "Other"
 
 
-# ═══════════════════════════════════════════════════════════════
-#  3. TCP-проверка (ПАРАЛЛЕЛЬНАЯ!)
-# ═══════════════════════════════════════════════════════════════
-
 def tcp_check(host, port, timeout=TCP_TIMEOUT):
-    """Проверка TCP-соединения."""
     try:
         ip = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -185,7 +160,6 @@ def tcp_check(host, port, timeout=TCP_TIMEOUT):
 
 
 def check_key_worker(key):
-    """Рабочая функция для параллельной проверки одного ключа."""
     host, port = extract_host_port(key)
     if not host or not port:
         return None
@@ -197,15 +171,11 @@ def check_key_worker(key):
 
 
 def check_keys_parallel(keys):
-    """Параллельная TCP-проверка ключей (БЫСТРО!)."""
     total = len(keys)
     working = []
-    
     print(f"\n🔍 Проверка ключей (параллельно, {MAX_WORKERS} потоков, таймаут {TCP_TIMEOUT} сек)...")
-    
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         futures = {executor.submit(check_key_worker, key): idx for idx, key in enumerate(keys, 1)}
-        
         for future in as_completed(futures):
             idx = futures[future]
             result = future.result()
@@ -215,17 +185,11 @@ def check_keys_parallel(keys):
                 print(f"  [{idx}/{total}] ✅ {rtt_ms} мс ({result[2]})")
             else:
                 print(f"  [{idx}/{total}] ❌ не работает")
-    
     print(f"\n✅ Рабочих ключей: {len(working)} из {total}")
     return working
 
 
-# ═══════════════════════════════════════════════════════════════
-#  4. Группировка и сортировка
-# ═══════════════════════════════════════════════════════════════
-
 def group_and_sort(working):
-    """Группировка ключей по регионам и сортировка по RTT."""
     groups = OrderedDict()
     for r in REGION_ORDER:
         groups[r] = []
@@ -250,16 +214,11 @@ def group_and_sort(working):
     return groups
 
 
-# ═══════════════════════════════════════════════════════════════
-#  5. Создание файлов
-# ═══════════════════════════════════════════════════════════════
-
 def chunk_list(lst, size):
     return [lst[i:i+size] for i in range(0, len(lst), size)]
 
 
 def create_subscription_files(groups, output_dir):
-    """Создание файлов подписок с заменёнными доменами."""
     os.makedirs(output_dir, exist_ok=True)
     file_meta = []
 
@@ -267,7 +226,6 @@ def create_subscription_files(groups, output_dir):
         items = groups.get(region, [])
         if not items:
             continue
-        
         original_keys = [k for k, _ in items]
         replaced_keys = [replace_hosts_in_key(k, REPLACE_HOST) for k in original_keys]
 
@@ -285,10 +243,6 @@ def create_subscription_files(groups, output_dir):
 
     return file_meta
 
-
-# ═══════════════════════════════════════════════════════════════
-#  6. Git: пуш с обработкой конфликтов
-# ═══════════════════════════════════════════════════════════════
 
 def push_to_repo(local_dir, file_meta):
     """Клонирование, коммит и пуш с автоматическим разрешением конфликтов."""
@@ -315,6 +269,18 @@ def push_to_repo(local_dir, file_meta):
         shutil.copy2(src, dst)
 
     subprocess.run(["git", "add", "-A"], cwd=clone_dir, capture_output=True, timeout=30)
+    
+    # ── НАСТРОЙКА GIT ПЕРЕД КОММИТОМ ──
+    subprocess.run(
+        ["git", "config", "user.name", "GitHub Actions Bot"],
+        cwd=clone_dir, capture_output=True, timeout=10
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "actions@github.com"],
+        cwd=clone_dir, capture_output=True, timeout=10
+    )
+    # ────────────────────────────────────
+    
     ts = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
     commit_result = subprocess.run(
         ["git", "commit", "-m", f"Auto update subscription files — {ts}"],
@@ -329,7 +295,6 @@ def push_to_repo(local_dir, file_meta):
         print("ℹ️  Нет изменений для пуша.")
         return True
 
-    # Пробуем пуш с pull --rebase при конфликте
     print("📤 Пуш в репозиторий...")
     push_result = subprocess.run(
         ["git", "push", "origin", BRANCH],
@@ -337,7 +302,6 @@ def push_to_repo(local_dir, file_meta):
     )
     
     if push_result.returncode != 0:
-        # Если пуш отклонён, пробуем pull --rebase
         if "rejected" in push_result.stderr:
             print("🔄 Конфликт, пробуем pull --rebase...")
             pull_result = subprocess.run(
@@ -347,8 +311,6 @@ def push_to_repo(local_dir, file_meta):
             if pull_result.returncode != 0:
                 print(f"❌ Ошибка rebase: {pull_result.stderr.strip()}")
                 return False
-            
-            # Пробуем пуш снова
             push_result = subprocess.run(
                 ["git", "push", "origin", BRANCH],
                 cwd=clone_dir, capture_output=True, text=True, timeout=60
@@ -363,10 +325,6 @@ def push_to_repo(local_dir, file_meta):
     print(f"✅ Успешно запушено {len(file_meta)} файлов в {CHECKED_DIR}/")
     return True
 
-
-# ═══════════════════════════════════════════════════════════════
-#  7. Telegram
-# ═══════════════════════════════════════════════════════════════
 
 def send_photo(chat_id, photo_path, caption, bot_token):
     if DRY:
@@ -490,10 +448,6 @@ def send_telegram(file_meta, total_keys):
     return True
 
 
-# ═══════════════════════════════════════════════════════════════
-#  8. Main
-# ═══════════════════════════════════════════════════════════════
-
 def main():
     version = "PRIVATE POSTER v25 (OPTIMIZED: parallel checks, limited keys)"
     print(f"\n{'='*50}")
@@ -502,22 +456,18 @@ def main():
         print("    no posts, no pushes")
     print(f"{'='*50}\n")
 
-    # 1. Загрузка и очистка (с ограничением)
     keys = load_and_clean()
     if not keys:
         print("❌ Нет ключей для обработки")
         return 1
 
-    # 2. TCP-проверка (ПАРАЛЛЕЛЬНО!)
     working = check_keys_parallel(keys)
     if not working:
         print("❌ Нет рабочих ключей")
         return 1
 
-    # 3. Группировка и сортировка по регионам
     groups = group_and_sort(working)
 
-    # 4. Создание файлов
     with tempfile.TemporaryDirectory(prefix="vpn_poster_") as tmpdir:
         file_meta = create_subscription_files(groups, tmpdir)
 
@@ -525,7 +475,6 @@ def main():
             print("❌ Нет файлов для публикации")
             return 1
 
-        # 5. Пуш на GitHub
         if DRY:
             print(f"\n[DRY] Пропускаем клонирование и пуш. Файлы во временной папке {tmpdir}")
         else:
@@ -537,7 +486,6 @@ def main():
                 print("❌ Ошибка пуша в репозиторий")
                 return 1
 
-        # 6. Telegram
         total_keys = sum(cnt for _, _, _, cnt in file_meta)
         if DRY:
             print(f"\n[DRY] Пропускаем отправку в Telegram.")
