@@ -1,12 +1,6 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — ФИНАЛЬНАЯ ВЕРСИЯ
-- Исправляет &amp; на & в параметрах
-- Преобразует ss:// (с UUID и Reality) в vless://
-- Параллельная TCP-проверка (30 потоков)
-- Ограничение снято (проверяются все ключи)
-- Таймаут 5 сек
-- Автоматический постинг в Telegram
+PRIVATE VPN POSTER — v25 + fix &amp; + convert ss:// (with UUID) to vless://
 """
 import os, sys, re, time, socket, tempfile, shutil, subprocess
 from datetime import datetime
@@ -24,8 +18,8 @@ SOURCE_URL = (
     "vpn-vless-configs-russia/refs/heads/main/data/githubmirror/new/all_new.txt"
 )
 REPLACE_HOST = "dostyp_k_internety"
-TCP_TIMEOUT = 5.0
-MAX_KEYS_TO_CHECK = 0           # 0 = проверять все
+TCP_TIMEOUT = 2.0
+MAX_KEYS_TO_CHECK = 200
 MAX_WORKERS = 30
 CHUNK_SIZE = 100
 REPO_OWNER = "kort0881"
@@ -44,11 +38,8 @@ TLD_REGION = {
     "th": "Asia", "vn": "Asia", "ph": "Asia", "id": "Asia",
     "us": "USA", "usa": "USA",
     "ru": "Russia",
-    "internety": "Other",
-    "xyz": "Other", "top": "Other", "online": "Other", "site": "Other",
-    "space": "Other", "tech": "Other", "cloud": "Other", "net": "Other",
-    "org": "Other", "com": "Other"
 }
+
 REGION_ORDER = ["Europe", "Asia", "USA", "Russia", "Other"]
 
 _sess = requests.Session()
@@ -63,22 +54,6 @@ GH_TOKEN = os.environ.get("GH_TOKEN", os.environ.get("GITHUB_TOKEN", ""))
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 COVER_PATH = os.path.join(SCRIPT_DIR, "cover_private.jpg")
 
-# ── ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ФОРМАТА ────────────────────
-
-def fix_ampersands(key: str) -> str:
-    """Заменяет &amp; на & в параметрах URL"""
-    return key.replace("&amp;", "&")
-
-def convert_ss_to_vless(key: str) -> str:
-    """
-    Преобразует ss:// с UUID и расширенными параметрами в vless://
-    Если ключ не начинается с ss://, возвращает как есть.
-    """
-    if not key.startswith("ss://"):
-        return key
-    return "vless://" + key[5:]
-
-# ── ОСНОВНЫЕ ФУНКЦИИ ────────────────────────────────────────
 
 def fetch_raw_keys(url):
     print(f"\n📥 Загрузка ключей из {url}...")
@@ -92,15 +67,21 @@ def fetch_raw_keys(url):
     print(f"✅ Загружено {len(lines)} строк")
     return lines
 
+
 def clean_key(raw):
     k = raw.strip()
     k = re.split(r"[ \t#|]", k, maxsplit=1)[0].strip()
-    k = fix_ampersands(k)          # исправляем &amp;
+    k = k.replace("&amp;", "&")   # фикс &amp;
+    # Если ключ ss:// и содержит UUID (длина > 50), преобразуем в vless://
+    if k.startswith("ss://") and len(k) > 50:
+        k = "vless://" + k[5:]
     return k
+
 
 def is_probably_key(line):
     protocols = ("vless://", "vmess://", "trojan://", "ss://", "ssr://")
     return any(line.startswith(p) for p in protocols)
+
 
 def load_and_clean():
     raw = fetch_raw_keys(SOURCE_URL)
@@ -117,11 +98,12 @@ def load_and_clean():
         seen[k] = True
 
     keys = list(seen.keys())
-    if MAX_KEYS_TO_CHECK > 0 and len(keys) > MAX_KEYS_TO_CHECK:
+    if len(keys) > MAX_KEYS_TO_CHECK:
         print(f"⚠️  Слишком много ключей ({len(keys)}), проверяем только {MAX_KEYS_TO_CHECK}")
         keys = keys[:MAX_KEYS_TO_CHECK]
     print(f"✅ После очистки и дедупликации: {len(keys)} уникальных ключей")
     return keys
+
 
 def extract_host_port(key):
     try:
@@ -145,22 +127,14 @@ def extract_host_port(key):
 
     return None, None
 
+
 def replace_hosts_in_key(key, new_host):
     key = re.sub(r"@([^:@\s]+)", f"@{new_host}", key)
     key = re.sub(r"(server|add)=([^&\s]+)", rf"\1={new_host}", key)
     return key
 
+
 def get_region_from_key(key):
-    # Сначала попробуем определить по sni или host
-    sni_match = re.search(r"sni=([^&\s]+)", key)
-    if sni_match:
-        sni = sni_match.group(1)
-        if "abramking.ru" in sni or "ru" in sni:
-            return "Russia"
-        if any(domain in sni for domain in ["deepl.com", "yahoo.com", "google.com"]):
-            return "Europe"
-        # можно добавить другие домены
-    # Стандартное определение по TLD
     host, _ = extract_host_port(key)
     if not host:
         return "Other"
@@ -169,6 +143,7 @@ def get_region_from_key(key):
         tld = parts[-1]
         return TLD_REGION.get(tld, "Other")
     return "Other"
+
 
 def tcp_check(host, port, timeout=TCP_TIMEOUT):
     try:
@@ -183,6 +158,7 @@ def tcp_check(host, port, timeout=TCP_TIMEOUT):
     except Exception:
         return None
 
+
 def check_key_worker(key):
     host, port = extract_host_port(key)
     if not host or not port:
@@ -192,6 +168,7 @@ def check_key_worker(key):
         region = get_region_from_key(key)
         return (key, rtt, region)
     return None
+
 
 def check_keys_parallel(keys):
     total = len(keys)
@@ -210,6 +187,7 @@ def check_keys_parallel(keys):
                 print(f"  [{idx}/{total}] ❌ не работает")
     print(f"\n✅ Рабочих ключей: {len(working)} из {total}")
     return working
+
 
 def group_and_sort(working):
     groups = OrderedDict()
@@ -235,8 +213,10 @@ def group_and_sort(working):
 
     return groups
 
+
 def chunk_list(lst, size):
     return [lst[i:i+size] for i in range(0, len(lst), size)]
+
 
 def create_subscription_files(groups, output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -247,13 +227,10 @@ def create_subscription_files(groups, output_dir):
         if not items:
             continue
         original_keys = [k for k, _ in items]
-        # Исправляем &amp; и заменяем хост
-        fixed_keys = [fix_ampersands(k) for k in original_keys]
-        replaced_keys = [replace_hosts_in_key(k, REPLACE_HOST) for k in fixed_keys]
-        # Преобразуем ss:// → vless://
-        final_keys = [convert_ss_to_vless(k) for k in replaced_keys]
+        # Заменяем хост (и при необходимости уже преобразованные vless)
+        replaced_keys = [replace_hosts_in_key(k, REPLACE_HOST) for k in original_keys]
 
-        chunks = chunk_list(final_keys, CHUNK_SIZE)
+        chunks = chunk_list(replaced_keys, CHUNK_SIZE)
         for part_num, chunk in enumerate(chunks, 1):
             fname = f"{region}_part{part_num}_sub.txt"
             fpath = os.path.join(output_dir, fname)
@@ -266,6 +243,7 @@ def create_subscription_files(groups, output_dir):
         print(f"   {fname} ({cnt} ключей) — {region} (part {part})")
 
     return file_meta
+
 
 def push_to_repo(local_dir, file_meta):
     repo_url = f"https://kort0881:{GH_TOKEN}@github.com/{REPO_OWNER}/{REPO_NAME}.git"
@@ -345,6 +323,7 @@ def push_to_repo(local_dir, file_meta):
     print(f"✅ Успешно запушено {len(file_meta)} файлов в {CHECKED_DIR}/")
     return True
 
+
 def send_photo(chat_id, photo_path, caption, bot_token):
     if DRY:
         print(f"[DRY] Отправка фото: {photo_path}")
@@ -365,6 +344,7 @@ def send_photo(chat_id, photo_path, caption, bot_token):
     except Exception as e:
         print(f"❌ Ошибка отправки фото: {e}")
         return False
+
 
 def send_message(chat_id, text, bot_token, reply_markup=None):
     if DRY:
@@ -393,6 +373,7 @@ def send_message(chat_id, text, bot_token, reply_markup=None):
         print(f"❌ Ошибка отправки сообщения: {e}")
         return False
 
+
 def build_keyboard(file_meta):
     kb_rows = []
     current_row = []
@@ -411,6 +392,7 @@ def build_keyboard(file_meta):
     if current_row:
         kb_rows.append(current_row)
     return {"inline_keyboard": kb_rows}
+
 
 def send_telegram(file_meta, total_keys):
     if not BOT_TOKEN or not CHANNEL_ID:
@@ -463,8 +445,9 @@ def send_telegram(file_meta, total_keys):
 
     return True
 
+
 def main():
-    version = "PRIVATE POSTER v26 (FINAL: fixed ss://→vless, &amp; fix, all keys)"
+    version = "PRIVATE POSTER v25-fix (ss://→vless for UUID keys)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     if DRY:
@@ -512,6 +495,7 @@ def main():
 
     print("\n✅ Готово!")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
