@@ -1,4 +1,4 @@
 vless://0c6b632a-cd96-4b74-9b51-151e3b5697db@dostyp_k_internety:2083?encryption=none&security=tls&serviceName=grpc&type=grpc
 vless://4480161e-2c59-4d37-8736-675c9af32bf1@dostyp_k_internety:40443?encryption=none&flow=xtls-rprx-vision&fp=&pbk=fWzCKXwvMXaacsl1DdFb1vKQ9l9cTK1G7udqmaYHL0Y&security=reality&sid=01d1bf2d4755d40c&sni=deepl.com&type=tcp
-vless://4480161e-2c59-4d37-8736-675c9af32bf1@dostyp_k_internety:40443?security=reality&encryption=none&pbk=fWzCKXwvMXaacsl1DdFb1vKQ9l9cTK1G7udqmaYHL0Y&headerType=none&fp=qq&type=tcp&flow=xtls-rprx-vision&sni=deepl.com&sid=01d1bf2d4755d40c
 vless://2c600a74-1dce-4b00-8040-5d9879f4fbc3@dostyp_k_internety:443?security=reality&encryption=none&pbk=n8Lxuie1FAOxxu9QuxjGL3zcn6N7YhFpE-eIDk7tjyE&host=%2F%3FBIA_TELEGRAM%40MARAMBASHI_MARAMBASHI_MARAMBASHI_MARAMBASHI&headerType=none&fp=firefox&spx=%2F&type=tcp&flow=xtls-rprx-vision&sni=go.abramking.ru&sid=325f0043b96172c5
+vless://4480161e-2c59-4d37-8736-675c9af32bf1@dostyp_k_internety:40443?security=reality&encryption=none&pbk=fWzCKXwvMXaacsl1DdFb1vKQ9l9cTK1G7udqmaYHL0Y&headerType=none&fp=qq&type=tcp&flow=xtls-rprx-vision&sni=deepl.com&sid=01d1bf2d4755d40c
