@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — v25 + fix &amp; + convert ss:// (with UUID) to vless://
+PRIVATE VPN POSTER — v28 (финальная стабильная версия)
+- MAX_KEYS_TO_CHECK = 500
+- TCP_TIMEOUT = 2.0 сек
+- DNS-префильтр
+- Три источника
 """
 import os, sys, re, time, socket, tempfile, shutil, subprocess
 from datetime import datetime
@@ -13,13 +17,16 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # ── Конфигурация ────────────────────────────────────────────
-SOURCE_URL = (
+SOURCE_URLS = [
     "https://raw.githubusercontent.com/kort0881/"
-    "vpn-vless-configs-russia/refs/heads/main/data/githubmirror/new/all_new.txt"
-)
+    "vpn-vless-configs-russia/refs/heads/main/data/githubmirror/new/all_new.txt",
+    "https://raw.githubusercontent.com/VAL41K/bypass-rkn-blocks/refs/heads/main/configs/obhod_WL",
+    "https://raw.githubusercontent.com/VAL41K/bypass-rkn-blocks/refs/heads/main/configs/obhod_BL",
+]
+
 REPLACE_HOST = "dostyp_k_internety"
-TCP_TIMEOUT = 2.0
-MAX_KEYS_TO_CHECK = 200
+TCP_TIMEOUT = 2.0                  # 2 секунды – баланс скорости и надёжности
+MAX_KEYS_TO_CHECK = 500            # 500 ключей – достаточно для наполнения канала
 MAX_WORKERS = 30
 CHUNK_SIZE = 100
 REPO_OWNER = "kort0881"
@@ -71,8 +78,7 @@ def fetch_raw_keys(url):
 def clean_key(raw):
     k = raw.strip()
     k = re.split(r"[ \t#|]", k, maxsplit=1)[0].strip()
-    k = k.replace("&amp;", "&")   # фикс &amp;
-    # Если ключ ss:// и содержит UUID (длина > 50), преобразуем в vless://
+    k = k.replace("&amp;", "&")
     if k.startswith("ss://") and len(k) > 50:
         k = "vless://" + k[5:]
     return k
@@ -84,21 +90,21 @@ def is_probably_key(line):
 
 
 def load_and_clean():
-    raw = fetch_raw_keys(SOURCE_URL)
-    if not raw:
-        return []
-
     seen = OrderedDict()
-    for line in raw:
-        k = clean_key(line)
-        if not k or not is_probably_key(k):
+    for url in SOURCE_URLS:
+        raw = fetch_raw_keys(url)
+        if not raw:
             continue
-        if k in seen:
-            continue
-        seen[k] = True
+        for line in raw:
+            k = clean_key(line)
+            if not k or not is_probably_key(k):
+                continue
+            if k in seen:
+                continue
+            seen[k] = True
 
     keys = list(seen.keys())
-    if len(keys) > MAX_KEYS_TO_CHECK:
+    if MAX_KEYS_TO_CHECK > 0 and len(keys) > MAX_KEYS_TO_CHECK:
         print(f"⚠️  Слишком много ключей ({len(keys)}), проверяем только {MAX_KEYS_TO_CHECK}")
         keys = keys[:MAX_KEYS_TO_CHECK]
     print(f"✅ После очистки и дедупликации: {len(keys)} уникальных ключей")
@@ -145,6 +151,21 @@ def get_region_from_key(key):
     return "Other"
 
 
+def dns_resolve(host):
+    try:
+        socket.getaddrinfo(host, 80, socket.AF_INET, socket.SOCK_STREAM, 0, socket.AI_ADDRCONFIG)
+        return True
+    except socket.gaierror:
+        return False
+
+
+def prefilt_key(key):
+    host, _ = extract_host_port(key)
+    if not host:
+        return False
+    return dns_resolve(host)
+
+
 def tcp_check(host, port, timeout=TCP_TIMEOUT):
     try:
         ip = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
@@ -160,6 +181,8 @@ def tcp_check(host, port, timeout=TCP_TIMEOUT):
 
 
 def check_key_worker(key):
+    if not prefilt_key(key):
+        return None
     host, port = extract_host_port(key)
     if not host or not port:
         return None
@@ -227,7 +250,6 @@ def create_subscription_files(groups, output_dir):
         if not items:
             continue
         original_keys = [k for k, _ in items]
-        # Заменяем хост (и при необходимости уже преобразованные vless)
         replaced_keys = [replace_hosts_in_key(k, REPLACE_HOST) for k in original_keys]
 
         chunks = chunk_list(replaced_keys, CHUNK_SIZE)
@@ -269,26 +291,17 @@ def push_to_repo(local_dir, file_meta):
         shutil.copy2(src, dst)
 
     subprocess.run(["git", "add", "-A"], cwd=clone_dir, capture_output=True, timeout=30)
-    
-    subprocess.run(
-        ["git", "config", "user.name", "GitHub Actions Bot"],
-        cwd=clone_dir, capture_output=True, timeout=10
-    )
-    subprocess.run(
-        ["git", "config", "user.email", "actions@github.com"],
-        cwd=clone_dir, capture_output=True, timeout=10
-    )
+    subprocess.run(["git", "config", "user.name", "GitHub Actions Bot"], cwd=clone_dir, capture_output=True, timeout=10)
+    subprocess.run(["git", "config", "user.email", "actions@github.com"], cwd=clone_dir, capture_output=True, timeout=10)
     
     ts = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
     commit_result = subprocess.run(
         ["git", "commit", "-m", f"Auto update subscription files — {ts}"],
         cwd=clone_dir, capture_output=True, text=True, timeout=30
     )
-
     if commit_result.returncode != 0 and "nothing to commit" not in commit_result.stderr:
         print(f"❌ Ошибка коммита: {commit_result.stderr.strip()}")
         return False
-
     if "nothing to commit" in commit_result.stderr:
         print("ℹ️  Нет изменений для пуша.")
         return True
@@ -298,7 +311,6 @@ def push_to_repo(local_dir, file_meta):
         ["git", "push", "origin", BRANCH],
         cwd=clone_dir, capture_output=True, text=True, timeout=60
     )
-    
     if push_result.returncode != 0:
         if "rejected" in push_result.stderr:
             print("🔄 Конфликт, пробуем pull --rebase...")
@@ -319,7 +331,6 @@ def push_to_repo(local_dir, file_meta):
         else:
             print(f"❌ Ошибка пуша: {push_result.stderr.strip()}")
             return False
-
     print(f"✅ Успешно запушено {len(file_meta)} файлов в {CHECKED_DIR}/")
     return True
 
@@ -447,7 +458,7 @@ def send_telegram(file_meta, total_keys):
 
 
 def main():
-    version = "PRIVATE POSTER v25-fix (ss://→vless for UUID keys)"
+    version = "PRIVATE POSTER v28 (500 keys, 2 sec timeout, DNS-filter)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     if DRY:
