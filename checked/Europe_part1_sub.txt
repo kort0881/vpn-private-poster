@@ -1,6 +1,6 @@
+vless://663cf772-829c-4bc6-893d-b7d021d42f5b@dostyp_k_internety:443?encryption=none&fp=chrome&host=vp1.cc.cd&path=%2F&security=tls&sni=vp1.cc.cd&type=ws
 vless://663cf772-829c-4bc6-893d-b7d021d42f5b@dostyp_k_internety:443?path=%2F&security=tls&encryption=none&insecure=0&host=vp1.cc.cd&fp=chrome&type=ws&allowInsecure=0&sni=vp1.cc.cd
 vless://83afd88f-200f-4d89-bfc7-66eff160c1d8@dostyp_k_internety:2053?path=%2F&security=tls&encryption=none&&host=josni.hoyes.cloudns.ch&type=ws&&sni=josni.hoyes.cloudns.ch
-vless://663cf772-829c-4bc6-893d-b7d021d42f5b@dostyp_k_internety:443?encryption=none&fp=chrome&host=vp1.cc.cd&path=%2F&security=tls&sni=vp1.cc.cd&type=ws
 vless://68e18e46-229d-491c-97a1-ee9cbf805630@dostyp_k_internety:2086?path=%2F&security=none&encryption=none&host=beh2.salonemojallal.ir&type=httpupgrade
 vless://8658fe29-466b-41d9-b1f9-05c268054f87@dostyp_k_internety:443?mode=gun&security=reality&encryption=none&pbk=kPBXTe2KCp55GrHS_qU_sF7ohUcT8Vu-e8i6Yd9MERI&fp=random&type=grpc&serviceName=data-sync&sni=google.com&sid=d5c7f84e37e0c12d
 vless://2415cbdc-e5fc-453e-91ad-0e2e532afb7c@dostyp_k_internety:80?path=/vless&security=none&encryption=none&host=de4.niekotin.de&type=ws
