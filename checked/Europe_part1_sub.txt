@@ -1,3 +1,3 @@
-vless://184c6424-38da-4891-9a2b-616a25bee372@dostyp_k_internety:443?security=reality&encryption=none&pbk=JtA0d5K6Jnmg35oWP9SDOsc1ceuqaxOsNg33fiPHJQs&host=yahoo.com&headerType=none&fp=firefox&type=tcp&flow=xtls-rprx-vision&sni=yahoo.com&sid=e915
 vless://2415cbdc-e5fc-453e-91ad-0e2e532afb7c@dostyp_k_internety:80?path=/vless&security=none&encryption=none&host=de4.niekotin.de&type=ws
+vless://184c6424-38da-4891-9a2b-616a25bee372@dostyp_k_internety:443?security=reality&encryption=none&pbk=JtA0d5K6Jnmg35oWP9SDOsc1ceuqaxOsNg33fiPHJQs&host=yahoo.com&headerType=none&fp=firefox&type=tcp&flow=xtls-rprx-vision&sni=yahoo.com&sid=e915
 vless://1d69b662-74b4-0001-8353-7c48e11ab9cd@dostyp_k_internety:443?type=raw&security=tls&flow=xtls-rprx-vision&sni=br-83-ru.netzrun.at&fp=firefox
