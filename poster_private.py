@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — v29 (с Xray-проверкой)
+PRIVATE VPN POSTER — v30 (с исправленным Xray и fallback)
 - TCP-фильтр (быстрый) + Xray-верификация топ-100 ключей
 - Автоустановка/использование Xray из переменной окружения XRAY_BIN
+- При сбое Xray автоматически переключается на TCP-результаты
 """
-import os, sys, re, time, socket, tempfile, shutil, subprocess, json, atexit
+import os, sys, re, time, socket, tempfile, shutil, subprocess, json, signal
 from datetime import datetime
 from collections import OrderedDict
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
@@ -35,7 +36,7 @@ CHECKED_DIR = "checked"
 # Настройки Xray
 XRAY_BIN = os.environ.get("XRAY_BIN", "./bin/xray")   # путь к xray
 XRAY_CHECK_TIMEOUT = 3.0       # время на проверку через Xray
-XRAY_TEST_URL = "https://api.ipify.org?format=json"  # или http://1.1.1.1
+XRAY_TEST_URL = "https://api.ipify.org?format=json"  # тестовый URL через прокси
 XRAY_MAX_PER_REGION = 20       # сколько ключей из каждого региона проверить через Xray
 
 TLD_REGION = {
@@ -169,119 +170,108 @@ def tcp_check(host, port, timeout=TCP_TIMEOUT):
     except Exception:
         return None
 
-# ── Xray-проверка ──────────────────────────────────────────
+# ── Новая Xray-проверка с правильным парсингом ─────────────
 def xray_check_key(key):
     """
-    Запускает Xray с временным конфигом, проверяет доступ через socks5.
-    Возвращает (успех, rtt_сек) или (False, None).
+    Проверяет VLESS-ключ через Xray.
+    Возвращает (успех, rtt_сек) или (False, None) при любой ошибке.
     """
     if not os.path.exists(XRAY_BIN):
-        print(f"⚠️  Xray не найден по пути {XRAY_BIN}, пропускаем Xray-проверку")
         return False, None
 
-    # Создаём временную директорию для конфига и логов
-    with tempfile.TemporaryDirectory(prefix="xray_check_") as tmpdir:
-        # Парсим ключ, чтобы понять протокол
+    try:
         parsed = urlparse(key)
         protocol = parsed.scheme.lower()
-        if protocol not in ("vless", "vmess", "trojan", "ss"):
-            return False, None
+    except Exception:
+        return False, None
 
-        # Формируем конфиг Xray
-        # Для простоты используем socks5 inbound на порту 1080, outbound с нашим ключом
-        # Для разных протоколов структура outbound отличается – упростим: используем формат v2ray
-        # Более универсально – передаём сырой ключ через параметр "settings" для vless/vmess.
-        # Здесь я покажу пример для vless и vmess (для остальных можно расширить)
-        outbound = None
-        if protocol == "vless":
-            outbound = {
-                "protocol": "vless",
-                "settings": {
-                    "vnext": [{
-                        "address": parsed.hostname,
-                        "port": parsed.port or 443,
-                        "users": [{
-                            "id": parsed.username or "",
-                            "encryption": parsed.password or "none",
-                            "flow": "xtls-rprx-vision" if "flow" in parsed.query else "",
-                            "level": 0
-                        }]
+    if protocol != "vless":
+        # Для других протоколов можно дописать, но пока пропускаем
+        return False, None
+
+    # Парсим query-параметры
+    query = dict(parse_qs(parsed.query))
+    def get_q(key, default=None):
+        return query.get(key, [default])[0] if key in query else default
+
+    try:
+        outbound = {
+            "protocol": "vless",
+            "settings": {
+                "vnext": [{
+                    "address": parsed.hostname,
+                    "port": parsed.port or 443,
+                    "users": [{
+                        "id": parsed.username or "",
+                        "encryption": get_q("encryption", "none"),
+                        "flow": get_q("flow", ""),
+                        "level": 0
                     }]
-                },
-                "streamSettings": {
-                    "network": parsed.scheme or "tcp",
-                    "security": "tls" if "tls" in parsed.query or parsed.scheme == "https" else "none",
-                    "tlsSettings": {
-                        "allowInsecure": True,
-                        "serverName": parsed.hostname
-                    } if "tls" in parsed.query or parsed.scheme == "https" else {}
-                }
+                }]
+            },
+            "streamSettings": {
+                "network": get_q("type", "tcp"),
+                "security": get_q("security", "none"),
+                "tlsSettings": {
+                    "allowInsecure": True,
+                    "serverName": get_q("sni", parsed.hostname)
+                } if get_q("security") == "tls" else {}
             }
-        elif protocol == "vmess":
-            # Для vmess нужно декодировать base64 или парсить параметры, сложнее.
-            # Используем упрощение: если ключ начинается с vmess://, можно попробовать передать как есть через "vmess" объект.
-            # Но для краткости пропустим – можно добавить отдельный парсер.
-            # В целях демонстрации пропустим vmess, но можно расширить.
-            return False, None
-        else:
-            return False, None
-
-        if not outbound:
-            return False, None
-
-        config = {
-            "inbounds": [{
-                "protocol": "socks",
-                "port": 1080,
-                "settings": {"auth": "noauth", "udp": False}
-            }],
-            "outbounds": [outbound]
         }
+    except Exception:
+        return False, None
 
-        config_path = os.path.join(tmpdir, "config.json")
+    config = {
+        "inbounds": [{
+            "protocol": "socks",
+            "port": 1080,
+            "settings": {"auth": "noauth", "udp": False}
+        }],
+        "outbounds": [outbound]
+    }
+
+    tmpdir = tempfile.mkdtemp(prefix="xray_check_")
+    config_path = os.path.join(tmpdir, "config.json")
+    log_path = os.path.join(tmpdir, "xray.log")
+    proc = None
+
+    try:
         with open(config_path, "w") as f:
             json.dump(config, f)
 
-        # Запускаем Xray
-        log_path = os.path.join(tmpdir, "xray.log")
         proc = subprocess.Popen(
             [XRAY_BIN, "-c", config_path],
             stdout=open(log_path, "w"),
             stderr=subprocess.STDOUT,
             preexec_fn=os.setsid if os.name == "posix" else None
         )
-        # Даём Xray время подняться
-        time.sleep(0.8)
+        time.sleep(0.8)  # даём Xray старт
 
-        # Проверяем через socks5 прокси
-        proxies = {
-            "http": "socks5://127.0.0.1:1080",
-            "https": "socks5://127.0.0.1:1080"
-        }
-        try:
-            start = time.time()
-            r = requests.get(XRAY_TEST_URL, proxies=proxies, timeout=XRAY_CHECK_TIMEOUT)
-            elapsed = time.time() - start
-            success = r.status_code == 200
-        except Exception:
-            success = False
-            elapsed = None
+        proxies = {"http": "socks5://127.0.0.1:1080", "https": "socks5://127.0.0.1:1080"}
+        start = time.time()
+        r = requests.get(XRAY_TEST_URL, proxies=proxies, timeout=XRAY_CHECK_TIMEOUT)
+        elapsed = time.time() - start
+        success = r.status_code == 200
+        return success, round(elapsed, 3) if success else None
 
-        # Убиваем Xray
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM) if os.name == "posix" else proc.terminate()
-        except:
-            proc.terminate()
-        proc.wait(timeout=2)
+    except Exception as e:
+        print(f"⚠️  Xray ошибка для {key[:30]}...: {e}")
+        return False, None
 
-        if success:
-            return True, round(elapsed, 3)
-        else:
-            return False, None
+    finally:
+        if proc:
+            try:
+                if os.name == "posix":
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                else:
+                    proc.terminate()
+                proc.wait(timeout=2)
+            except:
+                proc.kill()
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 # ── Основные функции проверки ──────────────────────────────
 def check_key_worker(key):
-    # Быстрая TCP-проверка
     if not prefilt_key(key):
         return None
     host, port = extract_host_port(key)
@@ -313,15 +303,13 @@ def check_keys_parallel(keys):
 
 def xray_verify_working(working):
     """
-    Дополнительная проверка через Xray: берём топ N ключей из каждого региона
-    и проверяем их реальную работоспособность.
-    Возвращает отфильтрованный список (только прошедшие Xray).
+    Проверяет топ-N ключей через Xray.
+    В случае проблем (нет бинарника, все проверки упали) – возвращает исходный working.
     """
     if not os.path.exists(XRAY_BIN):
-        print("⚠️  Xray не найден, пропускаем Xray-верификацию")
+        print("ℹ️  Xray не найден – пропускаем верификацию, используем TCP-результаты")
         return working
 
-    # Группируем по регионам и сортируем по RTT
     groups = {}
     for key, rtt, region in working:
         groups.setdefault(region, []).append((key, rtt))
@@ -329,24 +317,31 @@ def xray_verify_working(working):
         groups[region].sort(key=lambda x: x[1])
 
     verified = []
-    total_to_check = 0
+    total_checked = 0
     for region, items in groups.items():
         top = items[:XRAY_MAX_PER_REGION]
-        total_to_check += len(top)
+        total_checked += len(top)
         print(f"\n🧪 Xray-проверка {len(top)} ключей из региона {region}...")
         for key, rtt in top:
-            ok, x_rtt = xray_check_key(key)
+            try:
+                ok, x_rtt = xray_check_key(key)
+            except Exception as e:
+                print(f"   ❌ Исключение для {key[:30]}...: {e}")
+                ok = False
             if ok:
                 verified.append((key, x_rtt if x_rtt else rtt, region))
                 print(f"   ✅ {key[:30]}... {round(x_rtt*1000,1) if x_rtt else '?'} мс")
             else:
                 print(f"   ❌ {key[:30]}... не прошёл Xray")
-    print(f"\n✅ Прошли Xray: {len(verified)} из {total_to_check} проверенных")
+
+    if not verified:
+        print("⚠️  Xray не дал ни одного рабочего ключа – используем TCP-результаты целиком")
+        return working
+
+    print(f"\n✅ Прошли Xray: {len(verified)} из {total_checked} проверенных")
     return verified
 
-# ── Остальные функции (создание файлов, пуш, Telegram) без изменений ──
-# (они остаются такими же, как в вашей v28, поэтому я привожу их кратко)
-
+# ── Группировка, создание файлов, пуш, Telegram (из v28) ──
 def group_and_sort(working):
     groups = OrderedDict()
     for r in REGION_ORDER:
@@ -391,13 +386,194 @@ def create_subscription_files(groups, output_dir):
         print(f"   {fname} ({cnt} ключей) — {region} (part {part})")
     return file_meta
 
-# Функции push_to_repo, send_photo, send_message, build_keyboard, send_telegram
-# остаются без изменений (как в вашей версии v28). Я не привожу их здесь для краткости,
-# но они должны быть скопированы из вашего текущего файла.
+def push_to_repo(local_dir, file_meta):
+    repo_url = f"https://kort0881:{GH_TOKEN}@github.com/{REPO_OWNER}/{REPO_NAME}.git"
+    print(f"\n📦 Клонирование {REPO_OWNER}/{REPO_NAME}...")
+    clone_dir = os.path.join(local_dir, "repo_clone")
+    if os.path.exists(clone_dir):
+        shutil.rmtree(clone_dir)
+
+    result = subprocess.run(
+        ["git", "clone", repo_url, clone_dir, "--depth=1"],
+        capture_output=True, text=True, timeout=60
+    )
+    if result.returncode != 0:
+        print(f"❌ Ошибка клонирования: {result.stderr.strip()}")
+        return False
+
+    checked_path = os.path.join(clone_dir, CHECKED_DIR)
+    os.makedirs(checked_path, exist_ok=True)
+
+    for fname, _, _, _ in file_meta:
+        src = os.path.join(local_dir, fname)
+        dst = os.path.join(checked_path, fname)
+        shutil.copy2(src, dst)
+
+    subprocess.run(["git", "add", "-A"], cwd=clone_dir, capture_output=True, timeout=30)
+    subprocess.run(["git", "config", "user.name", "GitHub Actions Bot"], cwd=clone_dir, capture_output=True, timeout=10)
+    subprocess.run(["git", "config", "user.email", "actions@github.com"], cwd=clone_dir, capture_output=True, timeout=10)
+    
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
+    commit_result = subprocess.run(
+        ["git", "commit", "-m", f"Auto update subscription files — {ts}"],
+        cwd=clone_dir, capture_output=True, text=True, timeout=30
+    )
+    if commit_result.returncode != 0 and "nothing to commit" not in commit_result.stderr:
+        print(f"❌ Ошибка коммита: {commit_result.stderr.strip()}")
+        return False
+    if "nothing to commit" in commit_result.stderr:
+        print("ℹ️  Нет изменений для пуша.")
+        return True
+
+    print("📤 Пуш в репозиторий...")
+    push_result = subprocess.run(
+        ["git", "push", "origin", BRANCH],
+        cwd=clone_dir, capture_output=True, text=True, timeout=60
+    )
+    if push_result.returncode != 0:
+        if "rejected" in push_result.stderr:
+            print("🔄 Конфликт, пробуем pull --rebase...")
+            pull_result = subprocess.run(
+                ["git", "pull", "--rebase", "origin", BRANCH],
+                cwd=clone_dir, capture_output=True, text=True, timeout=30
+            )
+            if pull_result.returncode != 0:
+                print(f"❌ Ошибка rebase: {pull_result.stderr.strip()}")
+                return False
+            push_result = subprocess.run(
+                ["git", "push", "origin", BRANCH],
+                cwd=clone_dir, capture_output=True, text=True, timeout=60
+            )
+            if push_result.returncode != 0:
+                print(f"❌ Ошибка пуша: {push_result.stderr.strip()}")
+                return False
+        else:
+            print(f"❌ Ошибка пуша: {push_result.stderr.strip()}")
+            return False
+    print(f"✅ Успешно запушено {len(file_meta)} файлов в {CHECKED_DIR}/")
+    return True
+
+def send_photo(chat_id, photo_path, caption, bot_token):
+    if DRY:
+        print(f"[DRY] Отправка фото: {photo_path}")
+        return True
+    try:
+        with open(photo_path, "rb") as ph:
+            r = _sess.post(
+                f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+                data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
+                files={"photo": ph},
+                timeout=60,
+            )
+        j = r.json()
+        if not j.get("ok"):
+            print(f"❌ Ошибка фото: {j.get('description')}")
+            return False
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка отправки фото: {e}")
+        return False
+
+def send_message(chat_id, text, bot_token, reply_markup=None):
+    if DRY:
+        print(f"[DRY] Сообщение: {text[:60]}...")
+        return True
+    try:
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+        if reply_markup:
+            payload["reply_markup"] = reply_markup
+        r = _sess.post(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            json=payload,
+            timeout=30,
+        )
+        j = r.json()
+        if not j.get("ok"):
+            print(f"❌ Ошибка сообщения: {j.get('description')}")
+            return False
+        return True
+    except Exception as e:
+        print(f"❌ Ошибка отправки сообщения: {e}")
+        return False
+
+def build_keyboard(file_meta):
+    kb_rows = []
+    current_row = []
+    for fname, region, part_num, _ in file_meta:
+        url = (
+            f"https://raw.githubusercontent.com/"
+            f"{REPO_OWNER}/{REPO_NAME}/{BRANCH}/{CHECKED_DIR}/{fname}"
+        )
+        label = f"📥 {region} (part {part_num})"
+        if len(label) > 32:
+            label = label[:29] + ".."
+        current_row.append({"text": label, "url": url})
+        if len(current_row) == 2:
+            kb_rows.append(current_row)
+            current_row = []
+    if current_row:
+        kb_rows.append(current_row)
+    return {"inline_keyboard": kb_rows}
+
+def send_telegram(file_meta, total_keys):
+    if not BOT_TOKEN or not CHANNEL_ID:
+        print("⚠️  TELEGRAM_BOT_TOKEN или TELEGRAM_PRIVATE_CHANNEL не заданы")
+        return False
+
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    caption = (
+        f"🔐 <b>Private VPN Subscriptions</b>\n"
+        f"📅 {ts}\n"
+        f"📊 Всего ключей: {total_keys}\n"
+        f"📁 Файлов: {len(file_meta)}"
+    )
+
+    time.sleep(1)
+    if os.path.exists(COVER_PATH):
+        ok = send_photo(CHANNEL_ID, COVER_PATH, caption, BOT_TOKEN)
+        print(f"📸 Обложка отправлена: {ok}")
+    else:
+        ok = send_message(CHANNEL_ID, caption, BOT_TOKEN)
+        print(f"📝 Сообщение-обложка отправлено: {ok}")
+
+    keyboard = build_keyboard(file_meta)
+    all_buttons = keyboard["inline_keyboard"]
+    max_buttons_per_msg = 100
+    button_batches = []
+    current_batch = []
+    button_count = 0
+
+    for row in all_buttons:
+        current_batch.append(row)
+        button_count += len(row)
+        if button_count >= max_buttons_per_msg:
+            button_batches.append(current_batch)
+            current_batch = []
+            button_count = 0
+    if current_batch:
+        button_batches.append(current_batch)
+
+    for idx, batch in enumerate(button_batches):
+        time.sleep(1.5)
+        header = (
+            f"📋 Файлы подписок (часть {idx+1}/{len(button_batches)})"
+            if len(button_batches) > 1
+            else "📋 Файлы подписок"
+        )
+        markup = {"inline_keyboard": batch}
+        ok = send_message(CHANNEL_ID, header, BOT_TOKEN, markup)
+        print(f"📨 Кнопки (batch {idx+1}) отправлены: {ok}")
+
+    return True
 
 # ── main ────────────────────────────────────────────────────
 def main():
-    version = "PRIVATE POSTER v29 (TCP + Xray verify)"
+    version = "PRIVATE POSTER v30 (TCP + Xray verify с fallback)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     print(f"Xray binary: {XRAY_BIN}")
@@ -414,10 +590,15 @@ def main():
         print("❌ Нет рабочих ключей по TCP")
         return 1
 
-    # 2. Дополнительная Xray-верификация (только для топ-20 каждого региона)
-    final_working = xray_verify_working(tcp_working)
+    # 2. Дополнительная Xray-верификация (с защитой от ошибок)
+    try:
+        final_working = xray_verify_working(tcp_working)
+    except Exception as e:
+        print(f"⚠️  Критическая ошибка Xray: {e}, используем TCP-результаты")
+        final_working = tcp_working
+
     if not final_working:
-        print("❌ Нет ключей, прошедших Xray")
+        print("❌ Нет ключей для публикации (даже после fallback)")
         return 1
 
     # 3. Группировка и создание файлов
@@ -435,7 +616,7 @@ def main():
             if not GH_TOKEN:
                 print("⚠️  GH_TOKEN не задан — пуш невозможен")
                 return 1
-            push_ok = push_to_repo(tmpdir, file_meta)   # (нужно скопировать функцию)
+            push_ok = push_to_repo(tmpdir, file_meta)
             if not push_ok:
                 print("❌ Ошибка пуша в репозиторий")
                 return 1
@@ -444,7 +625,7 @@ def main():
         if DRY:
             print(f"\n[DRY] Пропускаем отправку в Telegram.")
         else:
-            tg_ok = send_telegram(file_meta, total_keys)  # (нужно скопировать)
+            tg_ok = send_telegram(file_meta, total_keys)
             if not tg_ok:
                 print("❌ Ошибка отправки в Telegram")
                 return 1
