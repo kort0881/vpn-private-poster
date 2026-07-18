@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — v30 (с исправленным Xray и fallback)
-- TCP-фильтр (быстрый) + Xray-верификация топ-100 ключей
-- Автоустановка/использование Xray из переменной окружения XRAY_BIN
-- При сбое Xray автоматически переключается на TCP-результаты
+PRIVATE VPN POSTER — v31 (Xray через HTTP inbound, увеличенные лимиты)
+- TCP-фильтр + Xray-верификация топ-30 ключей из каждого региона
+- Исправлена ошибка "Missing dependencies for SOCKS support"
+- MAX_KEYS_TO_CHECK = 1000, TCP_TIMEOUT = 3.0
 """
 import os, sys, re, time, socket, tempfile, shutil, subprocess, json, signal
 from datetime import datetime
@@ -24,8 +24,8 @@ SOURCE_URLS = [
 ]
 
 REPLACE_HOST = "dostyp_k_internety"
-TCP_TIMEOUT = 2.0
-MAX_KEYS_TO_CHECK = 500
+TCP_TIMEOUT = 3.0                      # увеличено с 2.0
+MAX_KEYS_TO_CHECK = 1000               # увеличено с 500
 MAX_WORKERS = 30
 CHUNK_SIZE = 100
 REPO_OWNER = "kort0881"
@@ -34,10 +34,10 @@ BRANCH = "main"
 CHECKED_DIR = "checked"
 
 # Настройки Xray
-XRAY_BIN = os.environ.get("XRAY_BIN", "./bin/xray")   # путь к xray
-XRAY_CHECK_TIMEOUT = 3.0       # время на проверку через Xray
-XRAY_TEST_URL = "https://api.ipify.org?format=json"  # тестовый URL через прокси
-XRAY_MAX_PER_REGION = 20       # сколько ключей из каждого региона проверить через Xray
+XRAY_BIN = os.environ.get("XRAY_BIN", "./bin/xray")
+XRAY_CHECK_TIMEOUT = 5.0               # увеличено с 3.0
+XRAY_TEST_URL = "https://api.ipify.org?format=json"
+XRAY_MAX_PER_REGION = 30               # увеличено с 20
 
 TLD_REGION = {
     "de": "Europe", "fr": "Europe", "nl": "Europe", "uk": "Europe",
@@ -170,11 +170,11 @@ def tcp_check(host, port, timeout=TCP_TIMEOUT):
     except Exception:
         return None
 
-# ── Новая Xray-проверка с правильным парсингом ─────────────
+# ── Xray-проверка через HTTP inbound (исправлено) ──────────
 def xray_check_key(key):
     """
-    Проверяет VLESS-ключ через Xray.
-    Возвращает (успех, rtt_сек) или (False, None) при любой ошибке.
+    Проверяет VLESS-ключ через Xray с HTTP-входом.
+    Возвращает (успех, rtt_сек) или (False, None).
     """
     if not os.path.exists(XRAY_BIN):
         return False, None
@@ -186,10 +186,8 @@ def xray_check_key(key):
         return False, None
 
     if protocol != "vless":
-        # Для других протоколов можно дописать, но пока пропускаем
         return False, None
 
-    # Парсим query-параметры
     query = dict(parse_qs(parsed.query))
     def get_q(key, default=None):
         return query.get(key, [default])[0] if key in query else default
@@ -221,11 +219,12 @@ def xray_check_key(key):
     except Exception:
         return False, None
 
+    # Используем HTTP inbound вместо SOCKS
     config = {
         "inbounds": [{
-            "protocol": "socks",
+            "protocol": "http",
             "port": 1080,
-            "settings": {"auth": "noauth", "udp": False}
+            "settings": {"auth": "noauth"}
         }],
         "outbounds": [outbound]
     }
@@ -245,9 +244,10 @@ def xray_check_key(key):
             stderr=subprocess.STDOUT,
             preexec_fn=os.setsid if os.name == "posix" else None
         )
-        time.sleep(0.8)  # даём Xray старт
+        time.sleep(0.8)
 
-        proxies = {"http": "socks5://127.0.0.1:1080", "https": "socks5://127.0.0.1:1080"}
+        # Прокси теперь HTTP
+        proxies = {"http": "http://127.0.0.1:1080", "https": "http://127.0.0.1:1080"}
         start = time.time()
         r = requests.get(XRAY_TEST_URL, proxies=proxies, timeout=XRAY_CHECK_TIMEOUT)
         elapsed = time.time() - start
@@ -302,10 +302,6 @@ def check_keys_parallel(keys):
     return working
 
 def xray_verify_working(working):
-    """
-    Проверяет топ-N ключей через Xray.
-    В случае проблем (нет бинарника, все проверки упали) – возвращает исходный working.
-    """
     if not os.path.exists(XRAY_BIN):
         print("ℹ️  Xray не найден – пропускаем верификацию, используем TCP-результаты")
         return working
@@ -341,7 +337,7 @@ def xray_verify_working(working):
     print(f"\n✅ Прошли Xray: {len(verified)} из {total_checked} проверенных")
     return verified
 
-# ── Группировка, создание файлов, пуш, Telegram (из v28) ──
+# ── Группировка, создание файлов, пуш, Telegram (без изменений) ──
 def group_and_sort(working):
     groups = OrderedDict()
     for r in REGION_ORDER:
@@ -573,10 +569,11 @@ def send_telegram(file_meta, total_keys):
 
 # ── main ────────────────────────────────────────────────────
 def main():
-    version = "PRIVATE POSTER v30 (TCP + Xray verify с fallback)"
+    version = "PRIVATE POSTER v31 (HTTP Xray, больше ключей)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     print(f"Xray binary: {XRAY_BIN}")
+    print(f"Проверяем до {MAX_KEYS_TO_CHECK} ключей, Xray топ-{XRAY_MAX_PER_REGION} на регион")
     print(f"{'='*50}\n")
 
     keys = load_and_clean()
@@ -584,13 +581,11 @@ def main():
         print("❌ Нет ключей для обработки")
         return 1
 
-    # 1. Быстрая TCP-проверка
     tcp_working = check_keys_parallel(keys)
     if not tcp_working:
         print("❌ Нет рабочих ключей по TCP")
         return 1
 
-    # 2. Дополнительная Xray-верификация (с защитой от ошибок)
     try:
         final_working = xray_verify_working(tcp_working)
     except Exception as e:
@@ -598,10 +593,9 @@ def main():
         final_working = tcp_working
 
     if not final_working:
-        print("❌ Нет ключей для публикации (даже после fallback)")
+        print("❌ Нет ключей для публикации")
         return 1
 
-    # 3. Группировка и создание файлов
     groups = group_and_sort(final_working)
 
     with tempfile.TemporaryDirectory(prefix="vpn_poster_") as tmpdir:
