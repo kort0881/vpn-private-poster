@@ -2,13 +2,13 @@ name: Private Poster
 
 on:
   schedule:
-    - cron: '0 */6 * * *'          # каждые 6 часов
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout code
@@ -26,15 +26,24 @@ jobs:
           pip install --upgrade pip
           pip install requests urllib3
 
-      # --- НОВЫЙ ШАГ: загрузка Xray ---
-      - name: Download Xray
+      - name: Cache Xray binary
+        id: cache-xray
+        uses: actions/cache@v3
+        with:
+          path: ./bin
+          key: xray-linux-64-v1.8.10
+
+      - name: Download Xray (if not cached)
+        if: steps.cache-xray.outputs.cache-hit != 'true'
         run: |
           mkdir -p ./bin
-          curl -L https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip -o ./bin/xray.zip
+          curl -L https://github.com/XTLS/Xray-core/releases/download/v1.8.10/Xray-linux-64.zip -o ./bin/xray.zip
           unzip -o ./bin/xray.zip -d ./bin/
           chmod +x ./bin/xray
-          echo "XRAY_PATH=$(pwd)/bin/xray" >> $GITHUB_ENV
         shell: bash
+
+      - name: Set XRAY_PATH
+        run: echo "XRAY_PATH=$(pwd)/bin/xray" >> $GITHUB_ENV
 
       - name: Configure Git
         run: |
@@ -47,5 +56,5 @@ jobs:
           TELEGRAM_PRIVATE_CHANNEL: ${{ secrets.TELEGRAM_PRIVATE_CHANNEL }}
           GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}
           TELEGRAM_DRY_RUN: "0"
-          XRAY_BIN: ${{ env.XRAY_PATH }}   # передаём путь к xray
+          XRAY_BIN: ${{ env.XRAY_PATH }}
         run: python poster_private.py
