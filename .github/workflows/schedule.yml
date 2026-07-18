@@ -2,39 +2,50 @@ name: Private Poster
 
 on:
   schedule:
-    - cron: '0 */6 * * *'
+    - cron: '0 */6 * * *'          # каждые 6 часов
   workflow_dispatch:
 
 jobs:
   post:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      
+
       - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install requests urllib3
-      
+
+      # --- НОВЫЙ ШАГ: загрузка Xray ---
+      - name: Download Xray
+        run: |
+          mkdir -p ./bin
+          curl -L https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip -o ./bin/xray.zip
+          unzip -o ./bin/xray.zip -d ./bin/
+          chmod +x ./bin/xray
+          echo "XRAY_PATH=$(pwd)/bin/xray" >> $GITHUB_ENV
+        shell: bash
+
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-      
+
       - name: Run private poster
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_PRIVATE_CHANNEL: ${{ secrets.TELEGRAM_PRIVATE_CHANNEL }}
           GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}
           TELEGRAM_DRY_RUN: "0"
+          XRAY_BIN: ${{ env.XRAY_PATH }}   # передаём путь к xray
         run: python poster_private.py
