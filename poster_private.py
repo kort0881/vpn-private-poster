@@ -17,8 +17,18 @@ from urllib3.util.retry import Retry
 
 # ── Конфигурация ────────────────────────────────────────────
 SOURCE_URLS = [
-    "https://raw.githubusercontent.com/kort0881/"
-    "vpn-vless-configs-russia/refs/heads/main/data/githubmirror/new/all_new.txt",
+    # Основные источники (из URLS_MY, без all_new.txt)
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/subscriptions/all_base64.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/subscriptions/all.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/subscriptions/sni_filtered_base64.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/my_sources/generated/vless.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/vless.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/hy2.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/hysteria2.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/ss.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/trojan.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/new/cf_fresh.txt",
+    # Дополнительные источники
     "https://raw.githubusercontent.com/VAL41K/bypass-rkn-blocks/refs/heads/main/configs/obhod_WL",
     "https://raw.githubusercontent.com/VAL41K/bypass-rkn-blocks/refs/heads/main/configs/obhod_BL",
 ]
