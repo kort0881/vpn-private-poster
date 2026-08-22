@@ -1,0 +1,1 @@
+{"event": "publish_blocked", "reason": "нет ни одного ключа, прошедшего протокольную проверку", "protocol_passed": 0, "min_publish_count": 3, "ts": "2026-08-22T11:43:31+00:00"}

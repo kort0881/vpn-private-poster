@@ -8,7 +8,7 @@ on:
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -31,14 +31,14 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ./bin
-          key: xray-linux-64-v1.8.10
+          key: xray-linux-64-v25.12.8
 
       - name: Download Xray (if not cached)
         if: steps.cache-xray.outputs.cache-hit != 'true'
         run: |
           mkdir -p ./bin
-          curl -L https://github.com/XTLS/Xray-core/releases/download/v1.8.10/Xray-linux-64.zip -o ./bin/xray.zip
-          unzip -o ./bin/xray.zip -d ./bin/
+          curl -L https://github.com/XTLS/Xray-core/releases/download/v25.12.8/Xray-linux-64.zip -o ./bin/xray.zip
+          unzip -o ./bin/xray.zip -d ./bin/ xray
           chmod +x ./bin/xray
         shell: bash
 

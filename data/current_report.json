@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-08-22T11:43:31+00:00",
+  "duration_seconds": 184.46,
+  "total_found": 130196,
+  "parsed": 1000,
+  "dns_passed": 839,
+  "tcp_passed": 444,
+  "protocol_passed": 0,
+  "published_count": 0,
+  "by_protocol": {},
+  "by_region": {},
+  "by_check_level": {},
+  "failures": {
+    "parse": 0,
+    "dns": 161,
+    "tcp": 395,
+    "protocol": 444,
+    "timeout": 0,
+    "unsupported": 0
+  },
+  "new_items": 0,
+  "removed_items": 0,
+  "stable_items": 0,
+  "critical_drop": false,
+  "publish_allowed": false,
+  "items": []
+}
