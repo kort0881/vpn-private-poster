@@ -2,9 +2,10 @@
 """
 Telegram-модуль контентного контура.
 
-- send_draft_to_admin: черновик + кнопки [✅ Опубликовать] [✏️ Перегенерировать] [🗑 Отклонить].
-- publish_approved_post: публикация одобренного поста в канал + запись published.jsonl.
-- build_subscription_buttons: кнопки-ссылки на реальные файлы checked/ (manifest.json).
+- publish_approved_post: публикация поста в канал + запись published.jsonl
+  (анти-дубль между запусками).
+- build_subscription_buttons: кнопки-ссылки на реальные файлы checked/
+  (manifest.json).
 
 Безопасность:
 - токен никогда не печатается;
@@ -34,23 +35,12 @@ MAX_MESSAGE_LENGTH = 4096
 
 _sess = requests.Session()
 
-APPROVE_CALLBACK = "content:approve:{draft_id}"
-REGENERATE_CALLBACK = "content:regenerate:{draft_id}"
-REJECT_CALLBACK = "content:reject:{draft_id}"
-
 
 def _bot_token() -> str:
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
         raise RuntimeError("Не задан TELEGRAM_BOT_TOKEN")
     return token
-
-
-def _admin_chat_id() -> str:
-    chat_id = os.getenv("TELEGRAM_ADMIN_CHAT_ID", "").strip()
-    if not chat_id:
-        raise RuntimeError("Не задан TELEGRAM_ADMIN_CHAT_ID")
-    return chat_id
 
 
 def _channel_id() -> str:
@@ -112,49 +102,8 @@ def build_subscription_buttons() -> list[dict]:
 
 
 def send_draft_to_admin(draft: dict, review: dict) -> bool:
-    """Отправляет черновик администратору с кнопками подтверждения."""
-    try:
-        chat_id = _admin_chat_id()
-        token = _bot_token()
-    except RuntimeError as exc:
-        print(f"⚠️ {exc}")
-        return False
-
-    draft_id = Path(draft.get("draft_path", "")).stem if draft.get("draft_path") else (
-        draft.get("id") or datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    )
-
-    post = draft.get("post", "")
-    text = (
-        "📝 <b>Черновик поста</b>\n"
-        f"Категория: {_escape(str(draft.get('category', '')))}\n"
-        f"Модель: {_escape(str(draft.get('model', '')))}\n"
-        f"Источники: {len(draft.get('sources') or [])}\n"
-        f"Проверено: {_escape(str(draft.get('checked_at', '')))}\n"
-        f"Риск: {review.get('risk_level', 'low')}\n\n"
-        f"Текст:\n\n{_escape(post)}\n\n"
-        "Проверка:\n"
-        "✅ источники найдены\n"
-        "✅ дата найдена\n"
-        "✅ секреты не найдены\n"
-        "✅ лимит длины соблюдён\n"
-        "⚠️ требуется ручное подтверждение"
-    )
-
-    keyboard = {"inline_keyboard": [[
-        {"text": "✅ Опубликовать", "callback_data": APPROVE_CALLBACK.format(draft_id=draft_id)},
-        {"text": "✏️ Перегенерировать", "callback_data": REGENERATE_CALLBACK.format(draft_id=draft_id)},
-        {"text": "🗑 Отклонить", "callback_data": REJECT_CALLBACK.format(draft_id=draft_id)},
-    ]]}
-
-    try:
-        for part in _split_long(text):
-            _api("sendMessage", chat_id=chat_id, text=part, parse_mode="HTML",
-                 disable_web_page_preview=True, reply_markup=keyboard)
-    except RuntimeError as exc:
-        print(f"❌ {exc}")
-        return False
-    return True
+    """Удалено: модерация админом не используется (авто-публикация)."""
+    raise RuntimeError("Модерация отключена по решению владельца")
 
 
 def publish_approved_post(draft: dict) -> bool:

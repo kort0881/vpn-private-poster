@@ -184,21 +184,21 @@ def main() -> int:
         print(f"   ⚠️ {problem}")
 
     if not review["safe_to_publish"]:
-        print("🚫 Черновик НЕ публикуется автоматически (needs_review/rejected)")
-        return 0 if args.dry_run else 0
+        print("🚫 Черновик НЕ публикуется (needs_review/rejected)")
+        return 0
 
     if args.dry_run:
-        print("[DRY] Черновик готов, отправка админу пропущена.")
+        print("[DRY] Черновик готов, публикация пропущена.")
         print(f"---\n{draft.get('post', '')}\n---")
         return 0
 
-    # Отправка администратору на подтверждение (без публикации в канал)
-    from src.telegram_content import send_draft_to_admin  # noqa: E402
-    ok = send_draft_to_admin(draft, review)
+    # Авто-публикация в канал (по решению владельца, без подтверждения)
+    from src.telegram_content import publish_approved_post  # noqa: E402
+    ok = publish_approved_post(draft)
     if not ok:
-        print("❌ Не удалось отправить черновик администратору")
+        print("❌ Не удалось опубликовать пост (дубль или ошибка)")
         return 1
-    print("✅ Черновик отправлен администратору на подтверждение")
+    print("✅ Пост опубликован в канал")
     return 0
 
 
