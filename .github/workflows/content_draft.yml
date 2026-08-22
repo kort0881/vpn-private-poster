@@ -29,7 +29,8 @@ jobs:
 
       - name: Generate content draft
         env:
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          # Секрет в репозитории назван API_KEY (значение — ключ Groq)
+          AI_API_KEY: ${{ secrets.API_KEY }}
           AI_BASE_URL: https://api.groq.com/openai/v1
           MODEL_PRIMARY: openai/gpt-oss-120b
           MODEL_FALLBACK: openai/gpt-oss-20b
