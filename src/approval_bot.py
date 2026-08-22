@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Поллер кнопок подтверждения постов (живой процесс).
+Поллер кнопок подтверждения постов.
 
 Слушает callback-кнопки в админском чате:
   ✅ Опубликовать      → публикация поста в канал + запись published.jsonl
   ✏️ Перегенерировать  → пометка черновика на перегенерацию
   🗑 Отклонить          → пометка черновика отклонённым
 
-Запуск (долгоиграющий процесс, systemd):
+Запуск в GitHub Actions (каждые 2 мин, workflow approval.yml):
+  python -m src.approval_bot --once
+
+Запуск как постоянный процесс (локально/на сервере):
   python -m src.approval_bot
 
 Только администратор (TELEGRAM_ADMIN_CHAT_ID) может подтверждать.
@@ -108,7 +111,43 @@ def handle_callback(query: dict) -> str | None:
     return None
 
 
+def run_once() -> int:
+    """
+    Однократная обработка ожидающих callback-кнопок (для GitHub Actions).
+
+    Читает все неподтверждённые апдейты, обрабатывает кнопки,
+    затем подтверждает их offset'ом, чтобы не перечитывать повторно.
+    """
+    updates = _api("getUpdates", offset=0, timeout=5,
+                   allowed_updates=["callback_query"])
+    result = updates.get("result", [])
+    last_id = 0
+    for update in result:
+        update_id = update.get("update_id")
+        if update_id is not None:
+            last_id = max(last_id, update_id)
+        query = update.get("callback_query")
+        if not query:
+            continue
+        try:
+            reply = handle_callback(query)
+            if reply:
+                _api("answerCallbackQuery",
+                     callback_query_id=query.get("id"),
+                     text=reply, show_alert=False)
+                print(f"💬 {reply}", flush=True)
+        except RuntimeError as exc:
+            print(f"⚠️ обработка кнопки: {exc}", flush=True)
+    if last_id:
+        # подтверждаем обработанные апдейты
+        _api("getUpdates", offset=last_id + 1, timeout=1)
+    return 0
+
+
 def main() -> int:
+    if "--once" in sys.argv:
+        print("🤖 approval_bot: однократная обработка кнопок...")
+        return run_once()
     print("🤖 approval_bot: слушаю кнопки админа...")
     offset = 0
     while True:
