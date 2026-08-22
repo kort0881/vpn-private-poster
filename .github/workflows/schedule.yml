@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install requests urllib3
+          pip install -r requirements.txt
 
       - name: Cache Xray binary
         id: cache-xray
