@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-08-23T09:50:03+00:00",
+  "generated_at": "2026-08-23T10:07:16+00:00",
   "files": [
     {
       "name": "Other_part1_sub.txt",
       "region": "Other",
-      "count": 22,
+      "count": 20,
       "check_level": "protocol",
-      "last_verified": "2026-08-23T09:50:03+00:00"
+      "last_verified": "2026-08-23T10:07:16+00:00"
     }
   ]
 }
