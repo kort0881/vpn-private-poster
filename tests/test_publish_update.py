@@ -96,6 +96,29 @@ class TestButtons:
         assert pub_env["sent"][0]["buttons"] == fake_buttons
 
 
+class TestMskTimeReview:
+    """Время MSK — производное от checked_at, должно проходить review."""
+
+    def _draft(self):
+        return {
+            "category": "update",
+            "title": "Обновление подключений",
+            "post": "Проверено: 459. Прошли: 21. Проверено: 23.08.2026, 09:48 MSK",
+            "checked_at": "2026-08-23T06:48:00+00:00",
+            "sources": ["own_report"],
+            "buttons": [],
+        }
+
+    def test_msk_time_approved_with_checked_at_msk(self):
+        report = {**REPORT, "checked_at_msk": "23.08.2026, 09:48 MSK"}
+        review = pu._cr.review_draft(self._draft(), report=report)
+        assert review["safe_to_publish"] is True
+
+    def test_msk_time_needs_review_without_checked_at_msk(self):
+        review = pu._cr.review_draft(self._draft(), report=REPORT)
+        assert review["status"] == "needs_review"
+
+
 class TestOnePostPerRun:
     def test_single_run_sends_one_message(self, no_ai, pub_env):
         stats = pu.publish_update(REPORT, FILE_META)

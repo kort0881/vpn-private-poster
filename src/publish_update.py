@@ -142,6 +142,9 @@ def _build_ai_draft(report: dict, file_meta: list[dict] | None) -> dict | None:
         from src.ai_client import AIClient, AIClientError
 
         context = build_report_context(report)
+        # Время в MSK — производное от checked_at: AI должен использовать его
+        # как есть (иначе review сочтёт «09:48» не подтверждённым числом).
+        context["checked_at_msk"] = _format_checked_at(report.get("checked_at"))
         client = AIClient(chain="content")
         draft, model = client.generate_json(_build_ai_messages(context, file_meta))
     except (AIClientError, FileNotFoundError, OSError, ValueError) as exc:
@@ -202,7 +205,13 @@ def publish_update(
     draft = _build_ai_draft(report, file_meta)
     template = "ai" if draft else "fallback"
     if draft:
-        review = _cr.review_draft(draft, report=report)
+        # Отчёт для review дополняем checked_at_msk: время MSK — производное
+        # от checked_at (не выдуманное число), без него AI-пост с датой MSK
+        # всегда бы отклонялся проверкой чисел.
+        review = _cr.review_draft(
+            draft,
+            report={**report, "checked_at_msk": _format_checked_at(report.get("checked_at"))},
+        )
         if not review["safe_to_publish"]:
             print("⚠️ AI-пост не прошёл локальную проверку — используем безопасный fallback")
             for problem in review["problems"][:5]:

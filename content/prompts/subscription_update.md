@@ -5,7 +5,8 @@
 
 ## Данные (только из current_report.json)
 - total_found, parsed, protocol_passed, new_items, removed_items, stable_items;
-- failures, by_region, checked_at (UTC → переведи в MSK, +3 часа).
+- failures, by_region, checked_at (UTC), checked_at_msk (уже переведено в MSK —
+  используй его как есть, не пересчитывай).
 
 ## Правила (жёсткие, ТЗ3)
 - НЕ меняй числа: бери их ТОЛЬКО из JSON-отчёта.
