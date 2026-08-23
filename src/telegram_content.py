@@ -81,6 +81,7 @@ def build_subscription_buttons() -> list[dict]:
     """
     Кнопки-ссылки на реальные файлы checked/ из manifest.json.
     Возвращает [{"text": ..., "url": ...}], максимум 8 кнопок.
+    Один файл → кнопка «📥 Скачать подписку», несколько — по регионам.
     """
     manifest_path = CHECKED_DIR / "manifest.json"
     buttons: list[dict] = []
@@ -90,19 +91,75 @@ def build_subscription_buttons() -> list[dict]:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (ValueError, OSError):
         return buttons
-    for file_info in (manifest.get("files") or [])[:4]:
+    files = (manifest.get("files") or [])[:4]
+    single = len(files) == 1
+    for file_info in files:
         name = file_info.get("name", "")
         region = file_info.get("region", "")
         url = (
             f"https://raw.githubusercontent.com/"
             f"{REPO_OWNER}/{REPO_NAME}/{BRANCH}/checked/{name}"
         )
-        buttons.append({"text": f"📥 {region} ({name})", "url": url})
+        if single:
+            label = "📥 Скачать подписку"
+        else:
+            label = f"📥 {region} ({name})"
+        buttons.append({"text": label, "url": url})
     return buttons
 
 
+def build_post_buttons() -> list[dict]:
+    """
+    Кнопки для поста обновления: реальные файлы checked/ + опциональные
+    «🛠 Инструкция» / «🛟 Резервный способ» / «📊 Статус проверки».
+    Опциональные кнопки добавляются ТОЛЬКО при заданных TELEGRAM_*_URL —
+    ссылки не выдумываются (ТЗ3: «не добавлять несуществующие ссылки»).
+    """
+    buttons = build_subscription_buttons()
+    optional = (
+        ("TELEGRAM_GUIDE_URL", "🛠 Инструкция"),
+        ("TELEGRAM_BACKUP_URL", "🛟 Резервный способ"),
+        ("TELEGRAM_STATUS_URL", "📊 Статус проверки"),
+    )
+    for env_name, label in optional:
+        url = os.getenv(env_name, "").strip()
+        if url:
+            buttons.append({"text": label, "url": url})
+    return buttons
+
+
+def publish_post_with_buttons(post: str, buttons: list[dict] | None = None) -> bool:
+    """
+    Отправляет ОДИН пост в канал. Кнопки прикрепляются к сообщению
+    (inline_keyboard, по 2 в ряд).
+    """
+    try:
+        chat_id = _channel_id()
+        _bot_token()
+    except RuntimeError as exc:
+        print(f"⚠️ {exc}")
+        return False
+
+    reply_markup = None
+    if buttons:
+        rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+        reply_markup = {"inline_keyboard": rows}
+
+    try:
+        for part in _split_long(post):
+            _api(
+                "sendMessage", chat_id=chat_id, text=part, parse_mode="HTML",
+                disable_web_page_preview=True,
+                reply_markup=reply_markup if part == post[:len(part)] else None,
+            )
+    except RuntimeError as exc:
+        print(f"❌ {exc}")
+        return False
+    return True
+
+
 def send_draft_to_admin(draft: dict, review: dict) -> bool:
-    """Удалено: модерация админом не используется (авто-публикация)."""
+    """Удалено: модерация админом не используется (решение владельца)."""
     raise RuntimeError("Модерация отключена по решению владельца")
 
 

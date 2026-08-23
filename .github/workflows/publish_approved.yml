@@ -1,13 +1,10 @@
-name: Content Draft
+name: Publish Approved Content
 
 on:
-  schedule:
-    # Утро / день / вечер (по ТЗ1: не всё сразу)
-    - cron: '30 5,12,17 * * *'
   workflow_dispatch:
 
 jobs:
-  draft:
+  publish:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -27,21 +24,13 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Generate content draft (не публикует автоматически)
+      - name: Publish approved drafts (mode C)
         env:
-          # Секрет в репозитории назван API_KEY (значение — ключ Groq)
           AI_API_KEY: ${{ secrets.API_KEY }}
           AI_BASE_URL: https://api.groq.com/openai/v1
-          MODEL_PRIMARY: openai/gpt-oss-120b
-          MODEL_FALLBACK: openai/gpt-oss-20b
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_PRIVATE_CHANNEL: ${{ secrets.TELEGRAM_PRIVATE_CHANNEL }}
-          # ТЗ3 п.8B: content_draft НЕ публикуется автоматически.
-          # Черновик сохраняется в data/drafts/; публикация одобренных —
-          # workflow Publish Approved Content (--publish-approved).
-          ADMIN_REVIEW_REQUIRED: "1"
-          AUTO_PUBLISH: "0"
-        run: python -m src.content_generator
+        run: python -m src.content_generator --publish-approved
 
       - name: Commit published log and drafts (if any)
         run: |
@@ -49,10 +38,10 @@ jobs:
           git config --global user.email "actions@github.com"
           git add data/published.jsonl data/drafts/*.json 2>/dev/null || true
           if ! git diff --cached --quiet; then
-            git commit -m "Update content data — $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git commit -m "Publish approved content — $(date -u +'%Y-%m-%d %H:%M UTC')"
             git push origin main
           else
-            echo "Новых данных нет — коммит не нужен"
+            echo "Одобренных неопубликованных черновиков нет — коммит не нужен"
           fi
         env:
           GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}

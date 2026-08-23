@@ -57,4 +57,27 @@ jobs:
           GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}
           TELEGRAM_DRY_RUN: "0"
           XRAY_BIN: ${{ env.XRAY_PATH }}
+          # AI для улучшения технического поста (ТЗ3 п.4). Нет ключа → fallback.
+          AI_API_KEY: ${{ secrets.API_KEY }}
+          AI_BASE_URL: https://api.groq.com/openai/v1
+          MODEL_PRIMARY: openai/gpt-oss-120b
+          MODEL_FALLBACK: openai/gpt-oss-20b
+          # Технический пост (subscription_update) публикуется автоматически.
+          # Контентные посты (content_draft) — нет (отдельный workflow).
+          ADMIN_REVIEW_REQUIRED: "1"
+          AUTO_PUBLISH: "0"
         run: python poster_private.py
+
+      - name: Commit published log
+        run: |
+          git config --global user.name "GitHub Actions Bot"
+          git config --global user.email "actions@github.com"
+          git add data/published.jsonl 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "Update published log — $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push origin main
+          else
+            echo "Новых записей в published.jsonl нет — коммит не нужен"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}

@@ -52,3 +52,26 @@ class TestButtons:
         assert buttons[0]["text"].startswith("📥 Europe")
         assert "raw.githubusercontent.com" in buttons[0]["url"]
         assert "Europe_part1_sub.txt" in buttons[0]["url"]
+
+    def test_single_file_download_button(self, tmp_path, monkeypatch):
+        (tmp_path / "Other_part1_sub.txt").write_text("k1\n", encoding="utf-8")
+        manifest = {"files": [{"name": "Other_part1_sub.txt", "region": "Other", "count": 1}]}
+        (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        monkeypatch.setattr(tc, "CHECKED_DIR", tmp_path)
+        buttons = tc.build_subscription_buttons()
+        assert len(buttons) == 1
+        assert buttons[0]["text"] == "📥 Скачать подписку"
+
+    def test_build_post_buttons_optional_urls(self, tmp_path, monkeypatch):
+        (tmp_path / "Other_part1_sub.txt").write_text("k1\n", encoding="utf-8")
+        manifest = {"files": [{"name": "Other_part1_sub.txt", "region": "Other", "count": 1}]}
+        (tmp_path / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        monkeypatch.setattr(tc, "CHECKED_DIR", tmp_path)
+        monkeypatch.delenv("TELEGRAM_GUIDE_URL", raising=False)
+        monkeypatch.delenv("TELEGRAM_BACKUP_URL", raising=False)
+        monkeypatch.delenv("TELEGRAM_STATUS_URL", raising=False)
+        monkeypatch.setenv("TELEGRAM_GUIDE_URL", "https://example.com/guide")
+        buttons = tc.build_post_buttons()
+        assert buttons[0]["text"] == "📥 Скачать подписку"
+        assert any(b["text"] == "🛠 Инструкция" for b in buttons)
+        assert not any(b["text"] == "🛟 Резервный способ" for b in buttons)

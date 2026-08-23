@@ -7,12 +7,22 @@
   backup / security / news / digest.
 - Загружает промт рубрики + system.md.
 - Вызывает единый AIClient, парсит JSON-ответ.
+- Проверяет черновик (src.content_review).
 - Сохраняет черновик в data/drafts/<timestamp>.json.
-- Проверяет черновик (src.content_review) и отправляет администратору.
+
+Режимы (ТЗ3, п.8):
+  A. subscription_update — авто-пост технического обновления (schedule.yml,
+     см. src/publish_update.py).
+  B. content_draft — генерация новостей/инструкций/диагностики. Черновик
+     сохраняется в data/drafts/, в канал НЕ публикуется автоматически
+     (AUTO_PUBLISH=0 по умолчанию). При AUTO_PUBLISH=1 публикуется сразу.
+  C. publish_approved_content — публикация только одобренных черновиков
+     (--publish-approved).
 
 Команды:
-  python -m src.content_generator              # авто-рубрика по событию
+  python -m src.content_generator              # авто-рубрика по событию (B)
   python -m src.content_generator --dry-run    # без отправки в Telegram
+  python -m src.content_generator --publish-approved   # (C) одобренные черновики
   python -m src.content_generator --category guide --topic "Как обновить подписку на Android"
 """
 from __future__ import annotations
@@ -119,6 +129,44 @@ def build_messages(category: str, context: dict, topic: str | None) -> list[dict
     ]
 
 
+def publish_approved_drafts() -> int:
+    """Режим C (ТЗ3, п.8C): публикует только одобренные черновики."""
+    if not DRAFTS_DIR.exists():
+        print("ℹ️  Нет data/drafts/ — публиковать нечего")
+        return 0
+
+    from src.telegram_content import publish_approved_post  # noqa: E402
+
+    published = 0
+    for draft_path in sorted(DRAFTS_DIR.glob("*.json")):
+        if draft_path.name.endswith(".review.json"):
+            continue
+        review_path = draft_path.with_suffix(draft_path.suffix + ".review.json")
+        if not review_path.exists():
+            print(f"⏭️  {draft_path.name}: нет файла проверки — пропуск")
+            continue
+        try:
+            draft = json.loads(draft_path.read_text(encoding="utf-8"))
+            review = json.loads(review_path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            print(f"⏭️  {draft_path.name}: ошибка чтения ({exc}) — пропуск")
+            continue
+        if not review.get("safe_to_publish"):
+            print(f"⏭️  {draft_path.name}: черновик не одобрен "
+                  f"({review.get('status')}, risk={review.get('risk_level')}) — пропуск")
+            continue
+        ok = publish_approved_post(draft)
+        if ok:
+            published += 1
+            print(f"✅ {draft_path.name}: опубликован")
+        else:
+            print(f"⏭️  {draft_path.name}: дубль или ошибка публикации")
+
+    if published == 0:
+        print("ℹ️  Одобренных неопубликованных черновиков нет")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Генератор контентных постов")
     parser.add_argument("--dry-run", action="store_true",
@@ -127,7 +175,12 @@ def main() -> int:
                         help="принудительная рубрика")
     parser.add_argument("--topic", default=None,
                         help="тема для problem/guide")
+    parser.add_argument("--publish-approved", action="store_true",
+                        help="режим C: опубликовать только одобренные черновики")
     args = parser.parse_args()
+
+    if args.publish_approved:
+        return publish_approved_drafts()
 
     if not REPORT_PATH.exists():
         print("❌ Нет data/current_report.json — сначала запусти poster_private.py")
@@ -192,7 +245,16 @@ def main() -> int:
         print(f"---\n{draft.get('post', '')}\n---")
         return 0
 
-    # Авто-публикация в канал (по решению владельца, без подтверждения)
+    # Режим B (ТЗ3, п.8): по умолчанию контентные посты в канал
+    # НЕ публикуются автоматически (AUTO_PUBLISH=0). Черновик сохранён
+    # выше и лежит в data/drafts/ — публикация только явной командой
+    # `--publish-approved` (режим C). При AUTO_PUBLISH=1 — публикация сразу.
+    if os.getenv("AUTO_PUBLISH", "0").strip().lower() not in ("1", "true", "yes", "on"):
+        print("ℹ️  Черновик сохранён, в канал НЕ публикуется (AUTO_PUBLISH=0).")
+        print("ℹ️  Для публикации одобренных черновиков: "
+              "python -m src.content_generator --publish-approved")
+        return 0
+
     from src.telegram_content import publish_approved_post  # noqa: E402
     ok = publish_approved_post(draft)
     if not ok:

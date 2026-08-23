@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — v32 (модернизация по ТЗ)
+PRIVATE VPN POSTER — v33 (ТЗ3: единый пост обновления)
+
+Изменения относительно v32 (по ТЗ3):
+- Старая обложка «Private VPN Subscriptions» + отдельное сообщение
+  «📋 Файлы подписок» удалены из send_telegram().
+- Единая публикация publish_update(): один пост (AI или fallback)
+  с кнопками реальных файлов checked/, анти-дубль через
+  data/published.jsonl, лог-строки CONTENT_MODE/POST_TYPE/
+  POST_TEMPLATE/OLD_POST_FORMAT/POST PREVIEW.
+- Контентные посты (content_draft) больше не публикуются автоматически
+  (AUTO_PUBLISH=0), только через --publish-approved (режим C).
 
 Изменения относительно v31:
 - Удалена ss:// → vless:// конвертация (критический баг).
@@ -42,6 +52,7 @@ from urllib3.util.retry import Retry
 import yaml
 
 from src.report_diff import compute_diff, load_report
+from src.publish_update import publish_update
 
 # ── Пути и константы ───────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1243,56 +1254,22 @@ def build_keyboard(file_meta: list[dict]) -> dict:
     return {"inline_keyboard": kb_rows}
 
 
-def send_telegram(file_meta: list[dict], total_keys: int, protocol_passed: int) -> bool:
+def send_telegram(report: dict, file_meta: list[dict]) -> bool:
+    """
+    ТЗ3: единая публикация технического поста обновления.
+
+    Вместо старой обложки «Private VPN Subscriptions» + отдельного
+    сообщения «📋 Файлы подписок» отправляется ОДИН пост
+    (AI-версия или fallback) с кнопками реальных файлов checked/.
+    См. src.publish_update.publish_update.
+    """
     if not BOT_TOKEN or not CHANNEL_ID:
         print("⚠️  TELEGRAM_BOT_TOKEN или TELEGRAM_PRIVATE_CHANNEL не заданы")
         return False
-
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
-    caption = (
-        f"🔐 <b>Private VPN Subscriptions</b>\n"
-        f"📅 {ts}\n"
-        f"📊 Ключей после протокольной проверки: {protocol_passed}\n"
-        f"📁 Файлов: {len(file_meta)}"
-    )
-
-    time.sleep(1)
-    if os.path.exists(COVER_PATH):
-        ok = send_photo(CHANNEL_ID, COVER_PATH, caption, BOT_TOKEN)
-        print(f"📸 Обложка отправлена: {ok}")
-    else:
-        ok = send_message(CHANNEL_ID, caption, BOT_TOKEN)
-        print(f"📝 Сообщение-обложка отправлено: {ok}")
-
-    keyboard = build_keyboard(file_meta)
-    all_buttons = keyboard["inline_keyboard"]
-    max_buttons_per_msg = 100
-    button_batches = []
-    current_batch = []
-    button_count = 0
-
-    for row in all_buttons:
-        current_batch.append(row)
-        button_count += len(row)
-        if button_count >= max_buttons_per_msg:
-            button_batches.append(current_batch)
-            current_batch = []
-            button_count = 0
-    if current_batch:
-        button_batches.append(current_batch)
-
-    for idx, batch in enumerate(button_batches):
-        time.sleep(1.5)
-        header = (
-            f"📋 Файлы подписок (часть {idx+1}/{len(button_batches)})"
-            if len(button_batches) > 1
-            else "📋 Файлы подписок"
-        )
-        markup = {"inline_keyboard": batch}
-        ok = send_message(CHANNEL_ID, header, BOT_TOKEN, markup)
-        print(f"📨 Кнопки (batch {idx+1}) отправлены: {ok}")
-
-    return True
+    stats = publish_update(report, file_meta, dry_run=DRY)
+    if DRY:
+        return True  # dry-run: пост сформирован и показан в preview
+    return bool(stats["published"] or stats["skipped"])
 
 
 # ── Загрузка ключей ─────────────────────────────────────────
@@ -1341,7 +1318,7 @@ def load_and_clean(settings: dict) -> tuple[list[str], int, int]:
 # ── main ────────────────────────────────────────────────────
 def main() -> int:
     settings = load_settings()
-    version = "PRIVATE POSTER v32 (уровни проверки L1-L4, без TCP-fallback)"
+    version = "PRIVATE POSTER v33 (ТЗ3: единый пост обновления, L1-L4)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     print(f"Xray binary: {XRAY_BIN}")
@@ -1414,8 +1391,7 @@ def main() -> int:
         shutil.rmtree(stage_dir, ignore_errors=True)
 
     if DRY:
-        print(f"\n[DRY] Пропускаем push и Telegram.")
-        published_count = total_to_publish
+        print(f"\n[DRY] Пуш в репозиторий пропущен.")
     else:
         if not GH_TOKEN:
             print("⚠️  GH_TOKEN не задан — пуш невозможен")
@@ -1424,17 +1400,20 @@ def main() -> int:
         if not push_ok:
             print("❌ Ошибка пуша в репозиторий")
             return 1
-        published_count = total_to_publish
-        tg_ok = send_telegram(file_meta, total_to_publish, len(verified))
-        if not tg_ok:
-            print("❌ Ошибка отправки в Telegram")
-            return 1
 
+    # Отчёт пишем до публикации: publish_update использует данные отчёта
+    # (ТЗ3: AI получает только current_report.json и безопасные метаданные).
     duration = time.time() - start
-    report = build_report(results, total_found, parsed, duration, True, published_count, settings)
+    report = build_report(results, total_found, parsed, duration, True, total_to_publish, settings)
     write_report(report)
 
-    print(f"\n✅ Готово за {round(duration, 1)}с. Опубликовано: {published_count}")
+    # Единый пост обновления (ТЗ3 п.6): в DRY — формируется и показывается preview.
+    tg_ok = send_telegram(report, file_meta)
+    if not tg_ok:
+        print("❌ Ошибка отправки в Telegram")
+        return 1
+
+    print(f"\n✅ Готово за {round(duration, 1)}с. Опубликовано: {total_to_publish}")
     return 0
 
 
