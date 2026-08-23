@@ -868,6 +868,10 @@ def check_all(keys: list[str], settings: dict) -> list[dict]:
                         "check_level": "protocol",
                         "latency": x_rtt if x_rtt else res["latency"],
                         "error_code": None,
+                        # Важно: L4-успех обязан добавить "protocol" в levels_passed,
+                        # иначе build_report считает protocol_passed=0 и items пустыми
+                        # (баг v32, из-за которого в посте было «прошли: 0»).
+                        "levels_passed": ["parse", "dns", "tcp", "protocol"],
                     })
                     print(f"  [{done}/{len(tcp_ok)}] ✅ L4 protocol {round((x_rtt or 0)*1000,1)} мс ({res['region']})")
                 else:

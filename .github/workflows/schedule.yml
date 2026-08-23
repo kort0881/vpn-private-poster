@@ -68,16 +68,20 @@ jobs:
           AUTO_PUBLISH: "0"
         run: python poster_private.py
 
-      - name: Commit published log
+      - name: Commit published log and reports
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-          git add data/published.jsonl 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m "Update published log — $(date -u +'%Y-%m-%d %H:%M UTC')"
-            git push origin main
+          # current/previous_report.json нужны content_draft и diff по следующему
+          # запуску (без них пост показывает неверные new/removed/stable).
+          git add data/published.jsonl data/current_report.json data/previous_report.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "Новых записей нет — коммит не нужен"
           else
-            echo "Новых записей в published.jsonl нет — коммит не нужен"
+            git commit -m "Update published data — $(date -u +'%Y-%m-%d %H:%M UTC')"
+            # push_to_repo уже запушил checked/ — наш коммит поверх него (rebase)
+            git pull --rebase origin main
+            git push origin main
           fi
         env:
           GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}
