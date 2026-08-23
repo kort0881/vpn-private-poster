@@ -72,9 +72,10 @@ jobs:
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-          # current/previous_report.json нужны content_draft и diff по следующему
-          # запуску (без них пост показывает неверные new/removed/stable).
-          git add data/published.jsonl data/current_report.json data/previous_report.json 2>/dev/null || true
+          # Постер меняет: checked/* (файлы подписок), data/current+previous_report.json,
+          # data/diagnostics.jsonl, data/published.jsonl. Стейджим всё разом,
+          # иначе pull --rebase падает на unstaged changes.
+          git add data/ checked/ 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "Новых записей нет — коммит не нужен"
           else
