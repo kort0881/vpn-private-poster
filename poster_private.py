@@ -758,7 +758,7 @@ def xray_check_key(
         proxies = {"http": f"http://127.0.0.1:{proxy_port}", "https": f"http://127.0.0.1:{proxy_port}"}
         probe_urls = [XRAY_TEST_URL, XRAY_TEST_URL_FALLBACK, XRAY_TEST_URL_FALLBACK2]
 
-        last_err = "protocol_failed"
+                last_err = "protocol_failed"
         for url in probe_urls:
             start = time.time()
             status, err = _probe(url, proxies, timeout)
@@ -766,6 +766,16 @@ def xray_check_key(
             if status is not None and 200 <= status < 400:
                 return True, round(elapsed, 3), None
             last_err = err or (f"http_{status}" if status is not None else "unknown_error")
+            # v34.2: connection_error/timeout — проблема самого туннеля
+            # (локальный прокси Xray не отвечает или обрыв на стороне
+            # сервера), а не конкретного контрольного сайта. Пробовать
+            # оставшиеся URL через тот же сломанный туннель бессмысленно
+            # и утраивает время ожидания на каждый мёртвый ключ — именно
+            # это подняло длительность прогона с 813с до 1130с.
+            # Multi-probe остаётся полезен только при плохом HTTP-статусе
+            # (например http_503) — там смена адресата реально помогает.
+            if last_err in ("connection_error", "timeout"):
+                break
 
         return False, None, last_err
 
