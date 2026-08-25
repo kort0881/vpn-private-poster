@@ -2,6 +2,27 @@
 """
 Единая публикация технического поста после проверки (ТЗ3, п.6).
 
+v2 (фикс отчётности, 25.08.2026):
+- build_fallback_post(): используется report["checked_count"]
+  (реально проверенное количество после обрезки max_keys_to_check),
+  а НЕ report["total_found"]/raw_lines_found (сырые строки из всех
+  источников до обрезки — то самое "130671", которое видел пользователь).
+  Обратная совместимость: если checked_count отсутствует (старый
+  формат report), используется total_found как fallback.
+- region_display(): вместо английского "Region unknown" — русский текст
+  "Регион не определён". "Other" (GeoIP определил страну, но она не
+  входит в карту регионов) и "Unknown" (регион не определён вообще)
+  теперь различаются, а не сливаются в одну надпись.
+- _build_ai_draft(): после build_report_context(report) в context
+  принудительно перезаписывается checked_count и убирается
+  амбигуированное total_found, чтобы AI-версия поста тоже не могла
+  показать сырое число вместо реально проверенного. В user-сообщение
+  добавлена явная инструкция использовать только checked_count.
+- Финальная защита: перед preview-проверкой из готового текста поста
+  (AI ИЛИ fallback) убирается фраза "Region unknown" на случай, если
+  она всё же попадёт туда из старого промта/кэша — заменяется на
+  русский эквивалент.
+
 publish_update(report, file_meta):
 1. Формирует пост: AI-версия (если AI доступен и пост проходит
    src.content_review) или безопасный fallback-шаблон.
@@ -39,7 +60,17 @@ PROMPTS_DIR = SCRIPT_DIR / "content" / "prompts"
 PUBLISHED_LOG = SCRIPT_DIR / "data" / "published.jsonl"
 
 OLD_POST_TITLE = "Private VPN Subscriptions"
-UNKNOWN_REGIONS = ("Other", "Unknown", "")
+
+# v2: "Unknown" — регион вообще не удалось определить (нет GeoIP/TLD-совпадения).
+# "Other" — GeoIP определил страну, но она не входит в карту регионов.
+# Раньше оба случая сливались в один "Other" → "Region unknown".
+REGION_LABELS = {
+    "Unknown": "Регион не определён",
+    "Other": "Регион вне основных категорий",
+    "": "Регион не определён",
+    None: "Регион не определён",
+}
+UNRESOLVED_REGIONS = ("Unknown", "Other", "", None)
 
 MAX_PREVIEW_CHARS = 500
 
@@ -58,8 +89,26 @@ def _format_checked_at(checked_at: str | None) -> str:
 
 
 def region_display(region: str | None) -> str:
-    """'Other' → 'Region unknown' (ТЗ3: тест 7 — вместо неинформативного Other)."""
-    return "Region unknown" if (region or "Other") in UNKNOWN_REGIONS else region
+    """
+    v2: русский текст вместо "Region unknown". "Other" и "Unknown"
+    теперь различаются (см. UNRESOLVED_REGIONS/REGION_LABELS).
+    """
+    return REGION_LABELS.get(region, region or "Регион не определён")
+
+
+def _get_checked_count(report: dict) -> int:
+    """
+    v2: реально проверенное количество ключей в этом запуске.
+
+    checked_count — новое поле (после обрезки max_keys_to_check).
+    Если его нет (старый report без фикса в poster_private.py),
+    используем total_found как fallback, чтобы не сломаться на
+    старых отчётах — но это тот самый сырой счётчик, который давал
+    "130671" в постах, поэтому основной путь — checked_count.
+    """
+    if "checked_count" in report and report["checked_count"] is not None:
+        return int(report["checked_count"])
+    return int(report.get("total_found", 0) or 0)
 
 
 def _content_key(report: dict, file_meta: list[dict] | None) -> str:
@@ -84,16 +133,20 @@ def _content_key(report: dict, file_meta: list[dict] | None) -> str:
 def build_fallback_post(report: dict, file_meta: list[dict] | None) -> dict:
     """
     Безопасный fallback-шаблон (ТЗ3, п.5): новый формат, без старого
-    заголовка, только числа из отчёта. Не требует AI.
+    заголовка, только числа из отчёта.
+
+    v2: используется checked_count вместо total_found (см. _get_checked_count).
+    Регион выводится через region_display() с русским текстом.
     """
     file_count = len(file_meta or [])
     by_region = report.get("by_region") or {}
-    known_regions = [r for r in by_region if r not in UNKNOWN_REGIONS]
-    region_text = ", ".join(known_regions[:3]) if known_regions else "Region unknown"
+    known_regions = [r for r in by_region if r not in UNRESOLVED_REGIONS]
+    region_text = ", ".join(known_regions[:3]) if known_regions else region_display("Unknown")
+    checked_count = _get_checked_count(report)
 
     post = (
         "🔐 Обновление подключений\n\n"
-        f"Проверено: {report.get('total_found', 0)}\n"
+        f"Проверено уникальных конфигураций: {checked_count}\n"
         f"Полную проверку прошли: {report.get('protocol_passed', 0)}\n"
         f"Опубликовано файлов: {file_count}\n\n"
         f"🌐 Регион: {region_text}\n"
@@ -121,6 +174,13 @@ def _build_ai_messages(context: dict, file_meta: list[dict] | None) -> list[dict
         f"Данные отчёта (JSON):\n{json.dumps(context, ensure_ascii=False, indent=2)}\n\n"
         f"Файлы подписок (только имена): "
         f"{[m.get('name') for m in (file_meta or [])]}\n\n"
+        "ВАЖНО (не переопределяется рубрикой ниже): используй ТОЛЬКО "
+        "context['checked_count'] как количество проверенных конфигураций "
+        "в фразах вида 'Сегодня проверили...'. Поле total_found НЕ используй "
+        "и не показывай пользователю — это техническое сырое число строк из "
+        "источников до обрезки, оно не отражает реально проверенное количество. "
+        "Для региона используй ТОЛЬКО текст из context['region_note'] и "
+        "context['region_summary'] — не пиши 'Region unknown' на английском.\n\n"
         f"Правила рубрики:\n{rubric}\n\n"
         "Верни JSON по формату из системного промта."
     )
@@ -134,6 +194,11 @@ def _build_ai_draft(report: dict, file_meta: list[dict] | None) -> dict | None:
     """
     AI-версия поста. Возвращает draft или None, если AI недоступен,
     вернул пустой пост или не-JSON.
+
+    v2: контекст, полученный из build_report_context(report), дополняется
+    и частично перезаписывается ПОСЛЕ вызова — это гарантирует, что AI
+    получит корректный checked_count и русский текст региона независимо
+    от того, что именно строит build_report_context (её мы не меняем).
     """
     if not os.getenv("AI_API_KEY", "").strip():
         return None
@@ -142,9 +207,27 @@ def _build_ai_draft(report: dict, file_meta: list[dict] | None) -> dict | None:
         from src.ai_client import AIClient, AIClientError
 
         context = build_report_context(report)
+
+        # v2: принудительная коррекция полей контекста перед отправкой в AI.
+        checked_count = _get_checked_count(report)
+        context["checked_count"] = checked_count
+        context.pop("total_found", None)
+        context.pop("raw_lines_found", None)
+
+        by_region = report.get("by_region") or {}
+        known_regions = [r for r in by_region if r not in UNRESOLVED_REGIONS]
+        context["region_summary"] = (
+            ", ".join(known_regions[:3]) if known_regions else region_display("Unknown")
+        )
+        context["region_note"] = (
+            "Регион серверов определяется по IP через GeoIP; если определить "
+            "не удалось, писать 'Регион не определён' на русском, никогда "
+            "не писать 'Region unknown' на английском."
+        )
         # Время в MSK — производное от checked_at: AI должен использовать его
         # как есть (иначе review сочтёт «09:48» не подтверждённым числом).
         context["checked_at_msk"] = _format_checked_at(report.get("checked_at"))
+
         client = AIClient(chain="content")
         draft, model = client.generate_json(_build_ai_messages(context, file_meta))
     except (AIClientError, FileNotFoundError, OSError, ValueError) as exc:
@@ -160,6 +243,22 @@ def _build_ai_draft(report: dict, file_meta: list[dict] | None) -> dict | None:
         print("⚠️ AI вернул пустой пост — используем fallback")
         return None
     return draft
+
+
+def _sanitize_post_text(post: str) -> str:
+    """
+    v2: финальная защита текста поста перед отправкой — не зависит от
+    того, AI это сгенерировал или fallback. Гарантирует, что английское
+    "Region unknown" никогда не попадёт в канал, даже если просочилось
+    из старого кэша промта или неучтённого пути генерации.
+    """
+    replacements = {
+        "Region unknown.": "Регион не определён.",
+        "Region unknown": "Регион не определён",
+    }
+    for old, new in replacements.items():
+        post = post.replace(old, new)
+    return post
 
 
 def _preview_safe(text: str) -> bool:
@@ -226,6 +325,10 @@ def publish_update(
     if not post:
         print("❌ Пост пуст — публикация невозможна")
         return stats
+
+    # v2: финальная санитизация текста (AI или fallback) перед preview.
+    post = _sanitize_post_text(post)
+    draft["post"] = post
 
     stats["template"] = template
     print(f"POST_TEMPLATE: {template}")
