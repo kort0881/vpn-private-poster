@@ -1,31 +1,35 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — v34 (фиксы отчётности и гейт публикации)
+PRIVATE VPN POSTER — v34.1 (фикс UnicodeError при резолве кривых hostname)
 
-Изменения относительно v33:
+Изменения относительно v34:
+- _resolve_ip_cached(): добавлен перехват UnicodeError (IDNA-кодирование
+  падает на слишком длинных/кривых hostname: "UnicodeError: label too
+  long"). Раньше ловился только OSError, из-за чего один битый хост в
+  списке источников валил весь процесс проверки (traceback в GitHub
+  Actions). Теперь такой хост просто считается неразрешённым (регион
+  "Unknown"), проверка остальных ключей продолжается.
+- get_region_from_key(): добавлена дополнительная защита try/except
+  вокруг вызова _resolve_ip_cached()/_is_ip() и вокруг host.lower().split(".")
+  на случай экзотических ошибок кодирования, не покрытых внутри самих
+  функций.
+
+Изменения относительно v33 (сохранены из v34):
 1. checked_count: в отчёт добавлено реальное количество проверенных
    ключей (после обрезки max_keys_to_check). Поле total_found
-   переименовано по смыслу в raw_lines_found (сырых строк из всех
-   источников до дедупликации/обрезки) — используется только для
-   диагностики, НЕ для текста поста. В Telegram/AI должен идти
-   checked_count, а не total_found/raw_lines_found.
-2. should_publish_update(): пост в Telegram теперь публикуется только
-   при существенном изменении (new_items>=3 ИЛИ removed_items>=10 ИЛИ
+   переименовано по смыслу в raw_lines_found — используется только для
+   диагностики, НЕ для текста поста.
+2. should_publish_update(): пост в Telegram публикуется только при
+   существенном изменении (new_items>=3 ИЛИ removed_items>=10 ИЛИ
    |Δprotocol_passed|>=20% ИЛИ critical_drop=true). checked/ и push в
-   GitHub всё равно обновляются каждый прогон — не публикуется только
-   сам Telegram-пост. Причина логируется в diagnostics.jsonl
-   (event=post_skipped, reason=minor_change).
-3. xray_check_key(): fallback на второй контрольный URL теперь
-   срабатывает не только при исключении, но и при плохом HTTP-статусе
-   (например http_503) на основном XRAY_TEST_URL — один временный 503
-   больше не отбраковывает рабочий ключ.
-4. get_region_from_key(): регион определяется по IP (через опциональный
-   GeoIP-словарь GEOIP_DB_PATH, MaxMind .mmdb + geoip2, если доступен),
-   а не только по TLD домена. Если определить регион нельзя — ключ
-   попадает в bucket "Unknown" (а не "Other"), и в отчёте это явно
-   отличается от ошибки парсинга.
+   GitHub всё равно обновляются каждый прогон.
+3. xray_check_key(): multi-probe — fallback на резервные контрольные URL
+   срабатывает не только при исключении, но и при плохом HTTP-статусе.
+4. get_region_from_key(): регион определяется по IP (опциональный GeoIP
+   через GEOIP_DB_PATH), а не только по TLD домена. Если определить
+   регион нельзя — bucket "Unknown", а не "Other".
 
-Изменения относительно v32 (сохранены из v33):
+Изменения относительно v32 (сохранены):
 - Удалена ss:// → vless:// конвертация (критический баг).
 - Поддержка схем: vless, vmess, trojan, ss, hysteria2, hy2.
 - Уровни проверки L1 (parsing) / L2 (DNS) / L3 (TCP) / L4 (protocol).
@@ -100,20 +104,15 @@ REPO_NAME = "vpn-private-poster"
 BRANCH = "main"
 
 XRAY_BIN = os.environ.get("XRAY_BIN", os.path.join(SCRIPT_DIR, "bin", "xray"))
-# Xray сам ищет geoip.dat/geosite.dat рядом с бинарником.
-# Если нужен другой каталог assets — задать XRAY_ASSETS_DIR (→ XRAY_LOCATION_ASSET).
 XRAY_ASSETS_DIR = os.environ.get("XRAY_ASSETS_DIR", "")
 XRAY_TEST_URL = os.environ.get("XRAY_TEST_URL", "https://api.ipify.org?format=json")
 XRAY_TEST_URL_FALLBACK = os.environ.get("XRAY_TEST_URL_FALLBACK", "http://1.1.1.1")
 XRAY_TEST_URL_FALLBACK2 = os.environ.get(
     "XRAY_TEST_URL_FALLBACK2", "https://cp.cloudflare.com/generate_204"
 )
-MAX_XRAY_WORKERS = 3  # лимит параллельных Xray-процессов
+MAX_XRAY_WORKERS = 3
 
-# ── Гейт публикации поста (не путать с гейтом публикации файлов) ──
-MIN_NEW_ITEMS_FOR_POST = _new_items_threshold = int(
-    os.environ.get("MIN_NEW_ITEMS_FOR_POST", "3")
-)
+MIN_NEW_ITEMS_FOR_POST = int(os.environ.get("MIN_NEW_ITEMS_FOR_POST", "3"))
 MIN_REMOVED_ITEMS_FOR_POST = int(os.environ.get("MIN_REMOVED_ITEMS_FOR_POST", "10"))
 MIN_CHANGE_PERCENT_FOR_POST = float(os.environ.get("MIN_CHANGE_PERCENT_FOR_POST", "20"))
 
@@ -145,7 +144,6 @@ TLD_REGION = {
     "ru": "Russia",
 }
 
-# ISO country code → регион, используется при наличии GeoIP-базы.
 COUNTRY_TO_REGION = {
     "DE": "Europe", "FR": "Europe", "NL": "Europe", "GB": "Europe",
     "IT": "Europe", "ES": "Europe", "SE": "Europe", "NO": "Europe",
@@ -163,7 +161,6 @@ COUNTRY_TO_REGION = {
 REGION_ORDER = ["Europe", "Asia", "USA", "Russia", "Unknown", "Other"]
 CHUNK_SIZE = 100
 
-# ── Опциональный GeoIP (MaxMind .mmdb) ──────────────────────
 GEOIP_DB_PATH = os.environ.get("GEOIP_DB_PATH", "")
 _geoip_reader = None
 if GEOIP_DB_PATH and os.path.exists(GEOIP_DB_PATH):
@@ -182,7 +179,6 @@ _r = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
 _sess.mount("http://", HTTPAdapter(max_retries=_r))
 _sess.mount("https://", HTTPAdapter(max_retries=_r))
 
-# ── Настройки ──────────────────────────────────────────────
 DEFAULTS = {
     "max_keys_to_check": 1000,
     "max_workers": 20,
@@ -216,7 +212,6 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 def load_settings() -> dict:
-    """Читает config/settings.yaml, переопределяет значениями env."""
     settings = dict(DEFAULTS)
     if os.path.exists(CONFIG_PATH):
         try:
@@ -251,43 +246,26 @@ CHANNEL_ID = os.environ.get("TELEGRAM_PRIVATE_CHANNEL")
 GH_TOKEN = os.environ.get("GH_TOKEN", os.environ.get("GITHUB_TOKEN", ""))
 REPLACE_HOST = os.environ.get("REPLACE_HOST", "")
 
-# ── Парсинг и очистка ──────────────────────────────────────
+
 def is_supported_protocol(value: str) -> bool:
-    """Проверяет, что строка начинается с поддерживаемой схемы."""
     return bool(SCHEME_PATTERN.match(value.strip()))
 
 
 def clean_key(raw: str) -> str | None:
-    """
-    Очищает сырую строку из источника.
-
-    - убирает пробелы по краям;
-    - декодирует HTML-сущности (&amp; → & и т.п.);
-    - обрезает комментарий (по первому пробелу/табуляции), если он есть;
-    - НЕ меняет схему протокола;
-    - возвращает None для явно некорректной строки.
-    """
     if raw is None:
         return None
     k = str(raw)
-    # Обрезаем по первому пробельному символу (комментарий/мусор после ключа)
     k = re.split(r"[ \t]+", k.strip(), maxsplit=1)[0]
     if not k:
         return None
     k = html.unescape(k)
-    k = k.replace("&amp;", "&")  # на случай двойного кодирования
+    k = k.replace("&amp;", "&")
     if not k or len(k) < 12:
         return None
     return k
 
 
 def parse_key(key: str) -> dict | None:
-    """
-    Разбирает ключ: схема, hostname, port, query.
-
-    Возвращает dict {protocol, host, port, username, query} или None,
-    если ключ некорректен (L1 parsing failed).
-    """
     try:
         parsed = urlparse(key)
     except Exception:
@@ -299,9 +277,7 @@ def parse_key(key: str) -> dict | None:
     port = parsed.port
     query = parse_qs(parsed.query, keep_blank_values=True)
 
-    # vmess://base64(JSON) — host/port внутри payload
     if protocol == "vmess":
-        # Для vmess://b64 urlparse принимает b64 за netloc; берём его как payload
         vmess_payload = parsed.path.strip("/") or parsed.netloc
         vmess_data = _parse_vmess_payload(vmess_payload)
         if vmess_data:
@@ -324,10 +300,8 @@ def parse_key(key: str) -> dict | None:
 
 
 def _parse_vmess_payload(path: str) -> dict | None:
-    """Пытается распарсить vmess://base64(JSON). Возвращает None при неудаче."""
     payload = path.strip("/")
     try:
-        # base64url-safe
         payload = payload.replace("-", "+").replace("_", "/")
         payload += "=" * (-len(payload) % 4)
         decoded = base64.b64decode(payload).decode("utf-8", errors="ignore")
@@ -358,12 +332,10 @@ def _parse_vmess_payload(path: str) -> dict | None:
 
 
 def config_hash(key: str) -> str:
-    """sha256 ключа — безопасный идентификатор для отчётов."""
     return hashlib.sha256(key.encode("utf-8", errors="ignore")).hexdigest()
 
 
 def mask_key(key: str, show_chars: int = 6) -> str:
-    """Маскированный вид ключа для логов: схема://host****."""
     p = parse_key(key)
     if not p:
         return f"{key[:8]}***"
@@ -376,7 +348,6 @@ def mask_key(key: str, show_chars: int = 6) -> str:
 
 
 def deduplicate(keys: list[str]) -> tuple[list[str], int]:
-    """Удаляет точные дубли. Возвращает (уникальные, число дублей)."""
     seen: dict[str, None] = {}
     dups = 0
     for k in keys:
@@ -388,7 +359,6 @@ def deduplicate(keys: list[str]) -> tuple[list[str], int]:
 
 
 def extract_host_port(key: str) -> tuple[str | None, int | None]:
-    """host/port из ключа (для регионов и быстрых проверок)."""
     p = parse_key(key)
     if p:
         return p["host"], p["port"]
@@ -412,34 +382,36 @@ def _is_ip(host: str) -> bool:
 
 
 def _resolve_ip_cached(host: str) -> str | None:
-    """DNS resolve с простым in-memory кэшем на один запуск."""
+    """
+    DNS resolve с простым in-memory кэшем на один запуск.
+
+    v34.1: помимо socket.gaierror/OSError ловим UnicodeError — он
+    возникает при кодировании кривого/слишком длинного hostname в IDNA
+    (например, обрезанный или битый host из конфигурации: "UnicodeError:
+    label too long"). Раньше это не перехватывалось и валило весь процесс
+    проверки (traceback в GitHub Actions на одном плохом ключе из 1000).
+    """
     if host in _dns_cache:
         return _dns_cache[host]
     try:
         ip = socket.gethostbyname(host)
-    except OSError:
+    except (socket.gaierror, UnicodeError, OSError):
         ip = None
     _dns_cache[host] = ip
     return ip
 
 
 def get_region_from_key(key: str) -> str:
-    """
-    Определяет регион серверa.
-
-    Приоритет:
-    1. GeoIP по IP-адресу (если задан GEOIP_DB_PATH и база загрузилась).
-    2. TLD-эвристика — только если host НЕ является IP (для доменов
-       вида example.de и т.п.; для IP и CDN-доменов TLD ничего не значит).
-    3. "Unknown" — если ни один способ не сработал (не путать с "Other":
-       "Other" зарезервирован для случаев, когда GeoIP явно вернул
-       страну, не входящую в карту регионов).
-    """
     host, _ = extract_host_port(key)
     if not host:
         return "Unknown"
 
-    ip = host if _is_ip(host) else _resolve_ip_cached(host)
+    try:
+        ip = host if _is_ip(host) else _resolve_ip_cached(host)
+    except (socket.gaierror, UnicodeError, OSError):
+        # Дополнительная защита на случай экзотических ошибок кодирования
+        # хоста, не покрытых внутри _resolve_ip_cached/_is_ip.
+        ip = None
 
     if _geoip_reader and ip:
         try:
@@ -451,25 +423,25 @@ def get_region_from_key(key: str) -> str:
             pass
 
     if not _is_ip(host):
-        parts = host.lower().split(".")
+        try:
+            parts = host.lower().split(".")
+        except (UnicodeError, AttributeError):
+            return "Unknown"
         if len(parts) >= 2 and parts[-1] in TLD_REGION:
             return TLD_REGION[parts[-1]]
 
     return "Unknown"
 
 
-# ── L2 DNS / L3 TCP ────────────────────────────────────────
 def dns_resolve(host: str) -> bool:
     try:
         socket.getaddrinfo(host, 80, socket.AF_INET, socket.SOCK_STREAM, 0, socket.AI_ADDRCONFIG)
         return True
     except (socket.gaierror, UnicodeError, OSError):
-        # UnicodeEncodeError: битые/слишком длинные hostname (idna)
         return False
 
 
 def tcp_check(host: str, port: int, timeout: float) -> float | None:
-    """TCP-connect. Возвращает RTT в секундах или None."""
     try:
         ip = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -484,15 +456,12 @@ def tcp_check(host: str, port: int, timeout: float) -> float | None:
 
 
 def get_free_port() -> int:
-    """Возвращает свободный локальный TCP-порт."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
-# ── L4 protocol: Xray ──────────────────────────────────────
 def safe_error(exc: Exception) -> str:
-    """Короткое безопасное описание ошибки без деталей ключа."""
     name = type(exc).__name__
     msg = str(exc)
     if isinstance(exc, (socket.timeout, TimeoutError)) or "timed out" in msg:
@@ -507,7 +476,6 @@ def safe_error(exc: Exception) -> str:
 
 
 def _stream_settings(protocol: str, query: dict) -> dict:
-    """streamSettings для Xray по query-параметрам ключа."""
     def g(key: str, default=None):
         vals = query.get(key)
         if not vals:
@@ -567,10 +535,6 @@ def _stream_settings(protocol: str, query: dict) -> dict:
 
 
 def build_xray_config(key: str, proxy_port: int) -> dict | None:
-    """
-    Строит Xray-конфиг для ключа. Возвращает None, если протокол
-    не поддерживается Xray-проверкой (например, hysteria2).
-    """
     p = parse_key(key)
     if not p:
         return None
@@ -584,7 +548,6 @@ def build_xray_config(key: str, proxy_port: int) -> dict | None:
         return vals[0]
 
     if protocol == "hysteria2" or protocol == "hy2":
-        # Xray не умеет hysteria2-клиент — проверка недоступна
         return None
 
     if protocol == "vless":
@@ -636,8 +599,6 @@ def build_xray_config(key: str, proxy_port: int) -> dict | None:
         }
     elif protocol == "ss":
         if detect_wrapped_vless(query):
-            # ss-обёртка настоящего VLESS-ключa (reality/tls): проверяем как vless,
-            # префикс не заменяем — в подписку идёт оригинальная строка.
             outbound = {
                 "protocol": "vless",
                 "settings": {
@@ -688,7 +649,6 @@ def build_xray_config(key: str, proxy_port: int) -> dict | None:
 
 
 def _parse_ss(key: str, p: dict) -> tuple[str | None, str | None]:
-    """Возвращает (method, password) для настоящего ss:// ключа."""
     try:
         parsed = urlparse(key)
         userinfo = parsed.username or ""
@@ -699,7 +659,6 @@ def _parse_ss(key: str, p: dict) -> tuple[str | None, str | None]:
             return parsed.username or "", parsed.password
     except Exception:
         pass
-    # Формат ss://base64(method:password)@host:port
     m = re.match(r"ss://([A-Za-z0-9+/=_-]+)@", key)
     if m:
         b64 = m.group(1).replace("-", "+").replace("_", "/")
@@ -711,7 +670,6 @@ def _parse_ss(key: str, p: dict) -> tuple[str | None, str | None]:
                 return method, password
         except Exception:
             return None, None
-    # ss://base64(method:password@host:port)
     m = re.match(r"ss://([A-Za-z0-9+/=_-]+)$", key)
     if m:
         b64 = m.group(1).replace("-", "+").replace("_", "/")
@@ -727,13 +685,6 @@ def _parse_ss(key: str, p: dict) -> tuple[str | None, str | None]:
 
 
 def detect_wrapped_vless(query: dict) -> bool:
-    """
-    Определяет, является ли ключ с префиксом ss:// на самом деле
-    VLESS-конфигурацией (ss-обёртка: reality/tls + pbk/sid/flow).
-
-    Используется ТОЛЬКО для выбора логики ПРОВЕРКИ. Префикс в ключе
-    никогда не заменяется — в подписки попадает оригинальная строка.
-    """
     if "pbk" in query or "sid" in query:
         return True
     sec = (query.get("security") or [""])[0]
@@ -745,7 +696,6 @@ def detect_wrapped_vless(query: dict) -> bool:
 
 
 def _probe(url: str, proxies: dict, timeout: float) -> tuple[int | None, str | None]:
-    """Один HTTP-запрос через прокси. Возвращает (status_code|None, error_code|None)."""
     try:
         r = requests.get(url, proxies=proxies, timeout=timeout)
         return r.status_code, None
@@ -759,18 +709,6 @@ def xray_check_key(
     timeout: float,
     xray_bin: str = XRAY_BIN,
 ) -> tuple[bool, float | None, str | None]:
-    """
-    Проверяет ключ через Xray (L4 protocol).
-
-    Возвращает (успех, rtt_сек, error_code|None).
-    error_code — безопасная короткая причина ('timeout', 'xray_crash', ...).
-
-    v34: если основной контрольный URL вернул успешный ответ (2xx-3xx) —
-    засчитываем сразу. Если он вернул ЛЮБУЮ ошибку (плохой HTTP-статус
-    ИЛИ исключение), пробуем по очереди резервные URL, прежде чем
-    признать ключ нерабочим. Один временный http_503 на одном сервисе
-    больше не отбраковывает рабочую конфигурацию.
-    """
     if not os.path.exists(xray_bin):
         return False, None, "xray_missing"
 
@@ -788,8 +726,6 @@ def xray_check_key(
             json.dump(config, f)
 
         cmd = [xray_bin, "-c", config_path]
-        # Флага -assets/-assetsDir в Xray 25.x нет; путь к assets задаётся
-        # env XRAY_LOCATION_ASSET, а по умолчанию Xray ищет их рядом с бинарником.
         popen_env = None
         if XRAY_ASSETS_DIR:
             popen_env = {**os.environ, "XRAY_LOCATION_ASSET": XRAY_ASSETS_DIR}
@@ -808,7 +744,6 @@ def xray_check_key(
 
         time.sleep(0.8)
         if proc.poll() is not None:
-            # Процесс умер сразу — читаем хвост лога (безопасно, без URL)
             reason = "xray_crash"
             try:
                 with open(log_path, "r", encoding="utf-8", errors="ignore") as lf:
@@ -824,14 +759,13 @@ def xray_check_key(
         probe_urls = [XRAY_TEST_URL, XRAY_TEST_URL_FALLBACK, XRAY_TEST_URL_FALLBACK2]
 
         last_err = "protocol_failed"
-        for idx, url in enumerate(probe_urls):
+        for url in probe_urls:
             start = time.time()
             status, err = _probe(url, proxies, timeout)
             elapsed = time.time() - start
             if status is not None and 200 <= status < 400:
                 return True, round(elapsed, 3), None
             last_err = err or (f"http_{status}" if status is not None else "unknown_error")
-            # переходим к следующему probe URL, если этот не сработал
 
         return False, None, last_err
 
@@ -854,18 +788,11 @@ def xray_check_key(
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-# ── Полный цикл проверки ключа ─────────────────────────────
 def check_one(
     key: str,
     settings: dict,
     with_protocol: bool = True,
 ) -> dict | None:
-    """
-    Проверяет ключ по уровням L1-L4.
-
-    Возвращает dict-результат или None, если ключ не прошёл L1.
-    Никогда не содержит полный ключ.
-    """
     p = parse_key(key)
     if not p:
         return {
@@ -881,7 +808,6 @@ def check_one(
         }
 
     region = get_region_from_key(key)
-    # Фактический протокол: ss:// может быть обёрткой настоящего VLESS
     protocol = p["protocol"]
     if protocol == "ss":
         if detect_wrapped_vless(p["query"]):
@@ -897,18 +823,15 @@ def check_one(
         "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
 
-    # L2 DNS
     if not dns_resolve(p["host"]):
         return {**base, "check_level": "dns", "status": "dead", "latency": None,
                 "error_code": "dns_failed", "levels_passed": ["parse"]}
 
-    # L3 TCP
     rtt = tcp_check(p["host"], p["port"], settings["tcp_timeout"])
     if rtt is None:
         return {**base, "check_level": "tcp", "status": "dead", "latency": None,
                 "error_code": "tcp_failed", "levels_passed": ["parse", "dns"]}
 
-    # Hysteria2: UDP/QUIC — Xray-проверка недоступна, остаётся tcp_only
     if p["protocol"] in ("hysteria2", "hy2"):
         return {**base, "check_level": "tcp_only", "status": "working", "latency": rtt,
                 "error_code": "hysteria2_udp_not_supported",
@@ -917,7 +840,6 @@ def check_one(
     result = {**base, "check_level": "tcp", "status": "working", "latency": rtt,
               "error_code": None, "levels_passed": ["parse", "dns", "tcp"]}
 
-    # L4 protocol
     if with_protocol:
         port = get_free_port()
         ok, x_rtt, err = xray_check_key(key, port, settings["xray_timeout"])
@@ -940,13 +862,11 @@ def check_one(
 
 
 def check_all(keys: list[str], settings: dict) -> list[dict]:
-    """Параллельная проверка L1-L3, затем Xray (L4) с лимитом процессов."""
     total = len(keys)
     results: list[dict] = []
 
     print(f"\n🔍 Проверка {total} ключей ({settings['max_workers']} потоков, TCP-таймаут {settings['tcp_timeout']}с)...")
 
-    # Шаг 1: L1-L3 параллельно
     with ThreadPoolExecutor(max_workers=settings["max_workers"]) as executor:
         futures = {executor.submit(check_one, key, settings, with_protocol=False): idx for idx, key in enumerate(keys, 1)}
         for future in as_completed(futures):
@@ -961,7 +881,6 @@ def check_all(keys: list[str], settings: dict) -> list[dict]:
             else:
                 print(f"  [{idx}/{total}] ❌ {res['error_code']} ({res['protocol']})")
 
-    # Шаг 2: L4 protocol (Xray) с ограничением параллельных процессов
     tcp_ok = [r for r in results if r["status"] == "working" and r["check_level"] == "tcp"]
     hy2 = [r for r in results if r.get("error_code") == "hysteria2_udp_not_supported"]
     if not os.path.exists(XRAY_BIN):
@@ -984,9 +903,6 @@ def check_all(keys: list[str], settings: dict) -> list[dict]:
                         "check_level": "protocol",
                         "latency": x_rtt if x_rtt else res["latency"],
                         "error_code": None,
-                        # Важно: L4-успех обязан добавить "protocol" в levels_passed,
-                        # иначе build_report считает protocol_passed=0 и items пустыми
-                        # (баг v32, из-за которого в посте было «прошли: 0»).
                         "levels_passed": ["parse", "dns", "tcp", "protocol"],
                     })
                     print(f"  [{done}/{len(tcp_ok)}] ✅ L4 protocol {round((x_rtt or 0)*1000,1)} мс ({res['region']})")
@@ -1000,9 +916,7 @@ def check_all(keys: list[str], settings: dict) -> list[dict]:
     return results
 
 
-# ── Отчёты ─────────────────────────────────────────────────
 def rotate_reports() -> None:
-    """Текущий отчёт → previous. Не затирает при отсутствии current."""
     os.makedirs(REPORT_DIR, exist_ok=True)
     if os.path.exists(CURRENT_REPORT):
         try:
@@ -1012,7 +926,6 @@ def rotate_reports() -> None:
 
 
 def append_diagnostics(entry: dict) -> None:
-    """Дописывает безопасную запись в diagnostics.jsonl."""
     os.makedirs(REPORT_DIR, exist_ok=True)
     entry.setdefault("ts", datetime.now(timezone.utc).isoformat(timespec="seconds"))
     try:
@@ -1023,7 +936,6 @@ def append_diagnostics(entry: dict) -> None:
 
 
 def write_report(report: dict) -> None:
-    """Пишет отчёт во временный файл, затем атомарно заменяет current."""
     os.makedirs(REPORT_DIR, exist_ok=True)
     tmp_path = CURRENT_REPORT + ".tmp"
     with open(tmp_path, "w", encoding="utf-8") as f:
@@ -1041,16 +953,6 @@ def build_report(
     published_count: int,
     settings: dict,
 ) -> dict:
-    """
-    Собирает current_report.json по формату ТЗ.
-
-    v34: добавлено поле checked_count — реальное число ключей, которые
-    прошли проверку в этом запуске (после обрезки max_keys_to_check).
-    Поле total_found переименовано по смыслу в raw_lines_found: это
-    сырое количество уникальных строк из ВСЕХ источников ДО обрезки
-    (может быть кратно больше checked_count) — используется только
-    для диагностики и НЕ должно попадать в текст Telegram-поста.
-    """
     working = [r for r in results if r["status"] == "working"]
     protocol_passed = [r for r in results if "protocol" in r.get("levels_passed", []) and r["status"] == "working"]
     tcp_passed = [r for r in results if "tcp" in r.get("levels_passed", [])]
@@ -1088,11 +990,8 @@ def build_report(
         "schema_version": 2,
         "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "duration_seconds": round(duration, 2),
-        # v34: используем в постах ТОЛЬКО checked_count.
         "checked_count": checked_count,
         "raw_lines_found": raw_lines_found,
-        # total_found оставлен для обратной совместимости со старыми
-        # промтами/шаблонами, но НЕ должен использоваться в текстах постов.
         "total_found": raw_lines_found,
         "parsed": len(parsed_list),
         "dns_passed": len(dns_passed),
@@ -1114,19 +1013,6 @@ def build_report(
 
 
 def should_publish_update(report: dict) -> dict:
-    """
-    v34: гейт для ПОСТА в Telegram (не для обновления checked/ и push —
-    те выполняются всегда при успешной проверке).
-
-    Пост публикуется только при существенном изменении:
-    - new_items >= MIN_NEW_ITEMS_FOR_POST, ИЛИ
-    - removed_items >= MIN_REMOVED_ITEMS_FOR_POST, ИЛИ
-    - |Δ protocol_passed| относительно предыдущего отчёта >=
-      MIN_CHANGE_PERCENT_FOR_POST %, ИЛИ
-    - critical_drop=true.
-
-    Возвращает {"publish": bool, "reason": str, "change_percent": float}.
-    """
     new_items = report.get("new_items", 0) or 0
     removed_items = report.get("removed_items", 0) or 0
     protocol_passed = report.get("protocol_passed", 0) or 0
@@ -1160,19 +1046,13 @@ def should_publish_update(report: dict) -> dict:
     }
 
 
-# ── Публикация файлов ──────────────────────────────────────
 def replace_hosts_in_key(key: str, new_host: str) -> str:
-    """Заменяет hostname в ключе (используется ТОЛЬКО при replace_hosts=true)."""
     key = re.sub(r"@([^:@\s]+)", f"@{new_host}", key)
     key = re.sub(r"(server|add)=([^&\s]+)", rf"\1={new_host}", key)
     return key
 
 
 def prepare_keys_for_publish(verified_keys: list[tuple[str, dict]], settings: dict) -> list[tuple[str, dict]]:
-    """
-    Готовит ключи к публикации. Если replace_hosts=true — заменяет hostname
-    и перепроверяет ключ (публикуются только успешно проверенные замены).
-    """
     if not settings["replace_hosts"]:
         return verified_keys
     if not REPLACE_HOST:
@@ -1199,7 +1079,6 @@ def prepare_keys_for_publish(verified_keys: list[tuple[str, dict]], settings: di
 
 
 def create_subscription_files(groups: "OrderedDict[str, list[tuple[str, dict]]]", output_dir: str) -> list[dict]:
-    """Пишет файлы подписок. Возвращает file_meta (для manifest)."""
     os.makedirs(output_dir, exist_ok=True)
     file_meta = []
     for region in REGION_ORDER:
@@ -1234,16 +1113,10 @@ def build_manifest(file_meta: list[dict]) -> dict:
 
 
 def atomic_replace_checked(source_dir: str, file_meta: list[dict], manifest: dict, min_publish_count: int) -> bool:
-    """
-    Атомарно обновляет checked/: файлы уже записаны в source_dir (stage),
-    проверяются на непустоту и минимальное количество, затем заменяют
-    старые. Устаревшие part-файлы удаляются.
-    """
     if not file_meta:
         return False
     os.makedirs(CHECKED_DIR, exist_ok=True)
 
-    # Проверки перед заменой
     total_count = sum(m["count"] for m in file_meta)
     if total_count < min_publish_count:
         print(f"❌ Мало ключей для публикации: {total_count} < min_publish_count={min_publish_count} — checked/ не обновляется")
@@ -1255,7 +1128,6 @@ def atomic_replace_checked(source_dir: str, file_meta: list[dict], manifest: dic
             return False
 
     try:
-        # Удаляем старые part-файлы, которых нет в новом наборе
         new_names = {m["name"] for m in file_meta}
         for old in os.listdir(CHECKED_DIR):
             if old.endswith("_sub.txt") and old not in new_names:
@@ -1263,7 +1135,6 @@ def atomic_replace_checked(source_dir: str, file_meta: list[dict], manifest: dic
                     os.remove(os.path.join(CHECKED_DIR, old))
                 except OSError:
                     pass
-        # Заменяем файлы
         for m in file_meta:
             os.replace(os.path.join(source_dir, m["name"]), os.path.join(CHECKED_DIR, m["name"]))
         manifest_path = os.path.join(source_dir, "manifest.json")
@@ -1291,7 +1162,6 @@ def group_and_sort(verified: list[tuple[str, dict]]) -> "OrderedDict[str, list[t
     return groups
 
 
-# ── Push в GitHub ───────────────────────────────────────────
 def _redact(text: str) -> str:
     if GH_TOKEN and GH_TOKEN in text:
         text = text.replace(GH_TOKEN, "***")
@@ -1299,7 +1169,6 @@ def _redact(text: str) -> str:
 
 
 def push_to_repo() -> bool:
-    """Клонирует репозиторий и пушит checked/ целиком (файлы + manifest)."""
     repo_url = f"https://kort0881:{GH_TOKEN}@github.com/{REPO_OWNER}/{REPO_NAME}.git"
     print(f"\n📦 Клонирование {REPO_OWNER}/{REPO_NAME}...")
     clone_dir = os.path.join(tempfile.gettempdir(), "vpn_poster_repo_clone")
@@ -1366,7 +1235,6 @@ def push_to_repo() -> bool:
     return True
 
 
-# ── Telegram ────────────────────────────────────────────────
 def send_photo(chat_id: str, photo_path: str, caption: str, bot_token: str) -> bool:
     if DRY:
         print(f"[DRY] Отправка фото: {photo_path}")
@@ -1438,23 +1306,15 @@ def build_keyboard(file_meta: list[dict]) -> dict:
 
 
 def send_telegram(report: dict, file_meta: list[dict]) -> bool:
-    """
-    ТЗ3: единая публикация технического поста обновления.
-
-    v34: перед вызовом publish_update() в main() уже применён гейт
-    should_publish_update(); эта функция вызывается только если
-    решение "publish" — она сама по себе гейт не повторяет.
-    """
     if not BOT_TOKEN or not CHANNEL_ID:
         print("⚠️  TELEGRAM_BOT_TOKEN или TELEGRAM_PRIVATE_CHANNEL не заданы")
         return False
     stats = publish_update(report, file_meta, dry_run=DRY)
     if DRY:
-        return True  # dry-run: пост сформирован и показан в preview
+        return True
     return bool(stats["published"] or stats["skipped"])
 
 
-# ── Загрузка ключей ─────────────────────────────────────────
 def fetch_raw_keys(url: str) -> list[str]:
     print(f"\n📥 Загрузка ключей из {url}...")
     try:
@@ -1469,16 +1329,6 @@ def fetch_raw_keys(url: str) -> list[str]:
 
 
 def load_and_clean(settings: dict) -> tuple[list[str], int, int]:
-    """
-    Загрузка + очистка + дедупликация.
-
-    Возвращает (уникальные ключи для проверки, raw_lines_found, число дублей).
-
-    raw_lines_found — количество уникальных валидных строк из ВСЕХ
-    источников ДО обрезки по max_keys_to_check. Это диагностическое
-    число (может быть намного больше реально проверенных ключей) —
-    НЕ показывать его в Telegram-постах как "проверили X".
-    """
     raw_seen: OrderedDict = OrderedDict()
     for url in SOURCE_URLS:
         raw = fetch_raw_keys(url)
@@ -1502,10 +1352,9 @@ def load_and_clean(settings: dict) -> tuple[list[str], int, int]:
     return unique, raw_lines_found, dups
 
 
-# ── main ────────────────────────────────────────────────────
 def main() -> int:
     settings = load_settings()
-    version = "PRIVATE POSTER v34 (checked_count, publish-gate, multi-probe L4, GeoIP-регион)"
+    version = "PRIVATE POSTER v34.1 (фикс UnicodeError на кривых hostname)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     print(f"Xray binary: {XRAY_BIN}")
@@ -1539,7 +1388,6 @@ def main() -> int:
                 "protocol_passed": len(verified),
                 "min_publish_count": settings["min_publish_count"],
             })
-            # Не затираем checked/ — предыдущий набор сохраняется
             if settings["keep_previous_on_failure"]:
                 print("🛡️ checked/ не тронут (keep_previous_on_failure=true)")
             duration = time.time() - start
@@ -1547,7 +1395,6 @@ def main() -> int:
             write_report(report)
             return 1
 
-    # Собираем ключи для публикации
     key_by_hash = {config_hash(k): k for k in keys}
     verified_keys = [(key_by_hash[r["config_hash"]], r) for r in verified]
     verified_keys = prepare_keys_for_publish(verified_keys, settings)
@@ -1571,7 +1418,6 @@ def main() -> int:
             print("❌ Нет файлов для публикации")
             return 1
 
-        # Атомарная замена checked/
         if not atomic_replace_checked(stage_dir, file_meta, manifest, settings["min_publish_count"]):
             print("❌ Не удалось обновить checked/ — публикация отменена")
             return 1
@@ -1589,13 +1435,10 @@ def main() -> int:
             print("❌ Ошибка пуша в репозиторий")
             return 1
 
-    # Отчёт пишем до публикации: publish_update использует данные отчёта
-    # (ТЗ3: AI получает только current_report.json и безопасные метаданные).
     duration = time.time() - start
     report = build_report(results, raw_lines_found, checked_count, parsed, duration, True, total_to_publish, settings)
     write_report(report)
 
-    # v34: гейт публикации ПОСТА (checked/ и push уже обновлены выше в любом случае)
     decision = should_publish_update(report)
     print(
         f"\nℹ️  Решение по посту: publish={decision['publish']} "
@@ -1620,7 +1463,6 @@ def main() -> int:
         )
         return 0
 
-    # Единый пост обновления (ТЗ3 п.6): в DRY — формируется и показывается preview.
     tg_ok = send_telegram(report, file_meta)
     if not tg_ok:
         print("❌ Ошибка отправки в Telegram")
