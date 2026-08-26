@@ -755,10 +755,10 @@ def xray_check_key(
                 pass
             return False, None, reason
 
-        proxies = {"http": f"http://127.0.0.1:{proxy_port}", "https": f"http://127.0.0.1:{proxy_port}"}
+                proxies = {"http": f"http://127.0.0.1:{proxy_port}", "https": f"http://127.0.0.1:{proxy_port}"}
         probe_urls = [XRAY_TEST_URL, XRAY_TEST_URL_FALLBACK, XRAY_TEST_URL_FALLBACK2]
 
-                last_err = "protocol_failed"
+        last_err = "protocol_failed"
         for url in probe_urls:
             start = time.time()
             status, err = _probe(url, proxies, timeout)
