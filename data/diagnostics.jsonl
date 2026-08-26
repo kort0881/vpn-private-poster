@@ -1,2 +1,3 @@
 {"event": "publish_blocked", "reason": "нет ни одного ключа, прошедшего протокольную проверку", "protocol_passed": 0, "min_publish_count": 3, "ts": "2026-08-22T11:43:31+00:00"}
 {"event": "publish_blocked", "reason": "нет ни одного ключа, прошедшего протокольную проверку", "protocol_passed": 0, "min_publish_count": 3, "ts": "2026-08-22T12:13:24+00:00"}
+{"event": "post_skipped", "reason": "minor_change", "change_percent": 9.5, "new_items": 0, "removed_items": 2, "protocol_passed": 19, "ts": "2026-08-26T08:43:22+00:00"}
