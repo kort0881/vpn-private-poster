@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — v34.1 (фикс UnicodeError при резолве кривых hostname)
+PRIVATE VPN POSTER — v34.2 (фикс IndentationError + connection_error fail-fast)
 
-Изменения относительно v34:
+Изменения относительно v34.1:
+- xray_check_key(): исправлен IndentationError (строка last_err имела
+  16 пробелов вместо 8 после вставки блока v34.2 в предыдущей версии).
+- xray_check_key(): multi-probe теперь прерывается после первого
+  connection_error/timeout — эти ошибки означают проблему самого
+  туннеля (не конкретного контрольного сайта), поэтому пробовать
+  оставшиеся 2 URL через тот же сломанный туннель бессмысленно и
+  утраивает время ожидания на каждый мёртвый ключ (в логе это подняло
+  длительность прогона с 813с до 1130с). Multi-probe остаётся полезен
+  только при плохом HTTP-статусе (например http_503).
+
+Изменения относительно v34 (сохранены из v34.1):
 - _resolve_ip_cached(): добавлен перехват UnicodeError (IDNA-кодирование
   падает на слишком длинных/кривых hostname: "UnicodeError: label too
   long"). Раньше ловился только OSError, из-за чего один битый хост в
-  списке источников валил весь процесс проверки (traceback в GitHub
-  Actions). Теперь такой хост просто считается неразрешённым (регион
-  "Unknown"), проверка остальных ключей продолжается.
+  списке источников валил весь процесс проверки.
 - get_region_from_key(): добавлена дополнительная защита try/except
   вокруг вызова _resolve_ip_cached()/_is_ip() и вокруг host.lower().split(".")
-  на случай экзотических ошибок кодирования, не покрытых внутри самих
-  функций.
 
 Изменения относительно v33 (сохранены из v34):
 1. checked_count: в отчёт добавлено реальное количество проверенных
@@ -755,7 +762,7 @@ def xray_check_key(
                 pass
             return False, None, reason
 
-                proxies = {"http": f"http://127.0.0.1:{proxy_port}", "https": f"http://127.0.0.1:{proxy_port}"}
+        proxies = {"http": f"http://127.0.0.1:{proxy_port}", "https": f"http://127.0.0.1:{proxy_port}"}
         probe_urls = [XRAY_TEST_URL, XRAY_TEST_URL_FALLBACK, XRAY_TEST_URL_FALLBACK2]
 
         last_err = "protocol_failed"
@@ -1364,7 +1371,7 @@ def load_and_clean(settings: dict) -> tuple[list[str], int, int]:
 
 def main() -> int:
     settings = load_settings()
-    version = "PRIVATE POSTER v34.1 (фикс UnicodeError на кривых hostname)"
+    version = "PRIVATE POSTER v34.2 (фикс IndentationError, connection_error fail-fast)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     print(f"Xray binary: {XRAY_BIN}")
