@@ -24,3 +24,4 @@
 {"event": "post_skipped", "reason": "minor_change", "change_percent": 0.0, "new_items": 2, "removed_items": 2, "protocol_passed": 19, "ts": "2026-09-03T15:52:51+00:00"}
 {"event": "post_skipped", "reason": "minor_change", "change_percent": 10.5, "new_items": 2, "removed_items": 0, "protocol_passed": 21, "ts": "2026-09-03T20:35:24+00:00"}
 {"event": "post_skipped", "reason": "minor_change", "change_percent": 4.8, "new_items": 1, "removed_items": 0, "protocol_passed": 22, "ts": "2026-09-04T02:55:25+00:00"}
+{"event": "post_skipped", "reason": "minor_change", "change_percent": 18.2, "new_items": 0, "removed_items": 4, "protocol_passed": 18, "ts": "2026-09-04T10:39:53+00:00"}
