@@ -1,0 +1,9 @@
+{
+  "status": "needs_review",
+  "risk_level": "medium",
+  "problems": [
+    "число «19» не подтверждено отчётом"
+  ],
+  "required_changes": [],
+  "safe_to_publish": false
+}
