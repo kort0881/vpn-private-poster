@@ -14,3 +14,7 @@ data/drafts/*.raw
 # Бинарники Xray — артефакт: скачиваются workflow (кэш xray-linux-64-v25.12.8).
 # Трекать нельзя: кэш восстанавливает их поверх checkout → unstaged → rebase падает.
 bin/
+
+# Мусор/материалы в корне (не для репо)
+wget-log
+тз*.txt
