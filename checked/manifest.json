@@ -1,26 +1,26 @@
 {
-  "generated_at": "2026-10-18T20:17:10+00:00",
+  "generated_at": "2026-10-19T03:22:40+00:00",
   "files": [
     {
       "name": "USA_part1_sub.txt",
       "region": "USA",
       "count": 1,
       "check_level": "protocol",
-      "last_verified": "2026-10-18T20:17:10+00:00"
+      "last_verified": "2026-10-19T03:22:40+00:00"
     },
     {
       "name": "Russia_part1_sub.txt",
       "region": "Russia",
       "count": 1,
       "check_level": "protocol",
-      "last_verified": "2026-10-18T20:17:10+00:00"
+      "last_verified": "2026-10-19T03:22:40+00:00"
     },
     {
       "name": "Unknown_part1_sub.txt",
       "region": "Unknown",
-      "count": 18,
+      "count": 36,
       "check_level": "protocol",
-      "last_verified": "2026-10-18T20:17:10+00:00"
+      "last_verified": "2026-10-19T03:22:40+00:00"
     }
   ]
 }
