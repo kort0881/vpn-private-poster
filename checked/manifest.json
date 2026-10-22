@@ -1,12 +1,19 @@
 {
-  "generated_at": "2026-10-22T16:52:34+00:00",
+  "generated_at": "2026-10-22T21:25:07+00:00",
   "files": [
+    {
+      "name": "USA_part1_sub.txt",
+      "region": "USA",
+      "count": 1,
+      "check_level": "protocol",
+      "last_verified": "2026-10-22T21:25:07+00:00"
+    },
     {
       "name": "Unknown_part1_sub.txt",
       "region": "Unknown",
-      "count": 14,
+      "count": 21,
       "check_level": "protocol",
-      "last_verified": "2026-10-22T16:52:34+00:00"
+      "last_verified": "2026-10-22T21:25:07+00:00"
     }
   ]
 }
