@@ -1,28 +1,31 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — v34.4
+PRIVATE VPN POSTER — v34.5
 
-Ключевые изменения относительно v34.3:
+Ключевые изменения относительно v34.4:
 
-1. Добавлен validate_xray_config() — проверка конфига ДО запуска Xray.
-   Мусорные ключи (reality без pbk, короткий UUID, vision без TLS,
-   пустой sni) отсекаются за миллисекунды с причиной invalid_*,
-   вместо того чтобы запускать Xray и получать xray_crash через 3-8с.
+1. random.shuffle(all_keys) в load_and_clean() — проверяем СЛУЧАЙНЫЕ 1000
+   ключей из ~25000, а не первые 1000 из архива. Раньше 90% проверки
+   приходилось на мёртвые архивные ключи → protocol_passed = 9.
 
-2. xray_check_key(): при xray_crash в diagnostics.jsonl пишется полный
-   stderr Xray (10 последних строк). Раньше reason обрезался до 80
-   символов, реальную причину ("invalid public key", "unmarshal errors")
-   было не видно.
+2. SOURCE_URLS перестроен:
+   - Убрана мёртвая ссылка clean/vless.txt (404 на 2026-11-04)
+   - Свежие источники (cf_fresh, clean/*, VAL41K) — первыми
+   - Архив (archive/*) — в конец, как fallback
 
-3. reason при xray_crash расширен до 500 символов (5 строк stderr).
+3. GeoIP готов к подключению через GEOIP_DB_PATH:
+   если в workflow добавлен шаг скачивания GeoLite2-Country.mmdb
+   и env GEOIP_DB_PATH — регионы будут определяться по IP
+   (Europe/Asia/USA), а не все как "Unknown".
 
-Всё остальное из v34.3/v34.2 сохранено:
+Всё остальное из v34.4 сохранено:
+- validate_xray_config() отсекает мусор до запуска Xray
+- unquote(parsed.username) для URL-encoded UUID (главный фикс)
+- полный stderr в diagnostics.jsonl
 - cp.cloudflare.com первым URL
-- _wait_for_port вместо sleep(0.8)
-- fail-fast после 2-го URL (не 1-го)
+- _wait_for_port(3.0) вместо sleep(0.8)
+- fail-fast после 2-го URL
 - MAX_XRAY_WORKERS = 2
-- L1 parse / L2 dns / L3 tcp / L4 protocol
-- запрет TCP-fallback: публикуются только protocol_passed
 """
 from __future__ import annotations
 
@@ -32,6 +35,7 @@ import html
 import ipaddress
 import json
 import os
+import random
 import re
 import shutil
 import signal
@@ -63,21 +67,23 @@ DIAGNOSTICS_LOG = os.path.join(REPORT_DIR, "diagnostics.jsonl")
 CHECKED_DIR = os.path.join(SCRIPT_DIR, "checked")
 COVER_PATH = os.path.join(SCRIPT_DIR, "cover_private.jpg")
 
+# v34.5: свежие источники — первыми, архив — fallback в конце.
+# clean/vless.txt удалён из списка — 404 с 2026-11-04.
 SOURCE_URLS = [
-    # Основные источники (vpn-vless-configs-russia, репозиторий владельца)
-    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/subscriptions/all_base64.txt",
-    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/subscriptions/all.txt",
-    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/subscriptions/sni_filtered_base64.txt",
-    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/my_sources/generated/vless.txt",
-    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/vless.txt",
+    # Свежие (генерируются ежедневно)
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/new/cf_fresh.txt",
     "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/hy2.txt",
     "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/hysteria2.txt",
     "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/ss.txt",
     "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/trojan.txt",
-    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/new/cf_fresh.txt",
-    # Дополнительные источники
+    # Дополнительные (внешние)
     "https://raw.githubusercontent.com/VAL41K/bypass-rkn-blocks/refs/heads/main/configs/obhod_WL",
     "https://raw.githubusercontent.com/VAL41K/bypass-rkn-blocks/refs/heads/main/configs/obhod_BL",
+    # Архив — в конец, как fallback (там большинство мёртвых)
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/subscriptions/sni_filtered_base64.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/subscriptions/all_base64.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/subscriptions/all.txt",
+    "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/main/archive/my_sources/generated/vless.txt",
 ]
 
 REPO_OWNER = "kort0881"
@@ -155,6 +161,7 @@ if GEOIP_DB_PATH and os.path.exists(GEOIP_DB_PATH):
         import geoip2.database  # type: ignore
 
         _geoip_reader = geoip2.database.Reader(GEOIP_DB_PATH)
+        print(f"✅ GeoIP база загружена: {GEOIP_DB_PATH}")
     except Exception as _exc:  # noqa: BLE001
         print(f"⚠️  Не удалось загрузить GeoIP-базу {GEOIP_DB_PATH}: {_exc}")
         _geoip_reader = None
@@ -281,7 +288,8 @@ def parse_key(key: str) -> dict | None:
         "protocol": protocol,
         "host": host,
         "port": port,
-        "username": parsed.username or "",
+        # v34.5: unquote — критично для URL-encoded UUID (%61f%65d9510-...)
+        "username": unquote(parsed.username or ""),
         "query": query,
     }
 
@@ -693,7 +701,7 @@ def _wait_for_port(port: int, timeout: float, proc) -> bool:
 
 
 def validate_xray_config(config: dict) -> tuple[bool, str]:
-    """v34.4: проверка конфига ДО запуска Xray. Убирает xray_crash на мусорных ключах."""
+    """v34.5: проверка конфига ДО запуска Xray. Убирает xray_crash на мусорных ключах."""
     if not config or not config.get("outbounds"):
         return False, "no_outbound"
     out = config["outbounds"][0]
@@ -713,7 +721,13 @@ def validate_xray_config(config: dict) -> tuple[bool, str]:
         users = node.get("users", [])
         if not users or not users[0].get("id"):
             return False, "vless_no_uuid"
-        if len(users[0]["id"]) < 32:
+        # v34.5: строгая проверка UUID по канонической форме
+        uuid_val = users[0]["id"]
+        if not re.match(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            uuid_val,
+            re.IGNORECASE,
+        ):
             return False, "vless_bad_uuid"
         if users[0].get("flow") == "xtls-rprx-vision" and security not in ("tls", "reality"):
             return False, "vision_without_tls"
@@ -770,7 +784,7 @@ def xray_check_key(
     if config is None:
         return False, None, "protocol_not_supported"
 
-    # v34.4: валидация ДО запуска Xray — отсекает мусорные ключи за миллисекунды
+    # v34.5: валидация ДО запуска Xray — отсекает мусорные ключи за миллисекунды
     valid, reason = validate_xray_config(config)
     if not valid:
         return False, None, f"invalid_{reason}"
@@ -803,7 +817,6 @@ def xray_check_key(
 
         if not _wait_for_port(proxy_port, 3.0, proc):
             if proc.poll() is not None:
-                # v34.4: полный stderr в diagnostics
                 reason = "xray_crash"
                 full_log_lines: list[str] = []
                 try:
@@ -1415,20 +1428,23 @@ def load_and_clean(settings: dict) -> tuple[list[str], int, int]:
             raw_seen[k] = True
     raw_lines_found = len(raw_seen)
 
-    max_keys = settings["max_keys_to_check"]
-    if max_keys > 0 and len(raw_seen) > max_keys:
-        print(f"⚠️  Слишком много ключей ({len(raw_seen)}), проверяем только {max_keys}")
-        raw_seen = OrderedDict(list(raw_seen.items())[:max_keys])
+    # v34.5: перемешиваем все ключи — проверяем случайные, а не первые из архива
+    all_keys = list(raw_seen.keys())
+    random.shuffle(all_keys)
 
-    keys = list(raw_seen.keys())
-    unique, dups = deduplicate(keys)
+    max_keys = settings["max_keys_to_check"]
+    if max_keys > 0 and len(all_keys) > max_keys:
+        print(f"⚠️  Слишком много ключей ({len(all_keys)}), проверяем случайные {max_keys}")
+        all_keys = all_keys[:max_keys]
+
+    unique, dups = deduplicate(all_keys)
     print(f"✅ После очистки и дедупликации: {len(unique)} уникальных (дублей: {dups})")
     return unique, raw_lines_found, dups
 
 
 def main() -> int:
     settings = load_settings()
-    version = "PRIVATE POSTER v34.4 (config validator + full stderr in diagnostics)"
+    version = "PRIVATE POSTER v34.5 (random shuffle + strict UUID + fresh sources first)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     print(f"Xray binary: {XRAY_BIN}")
@@ -1436,6 +1452,7 @@ def main() -> int:
           f"replace_hosts: {settings['replace_hosts']}")
     print(f"Контрольные URL: {XRAY_TEST_URL} | {XRAY_TEST_URL_FALLBACK} | {XRAY_TEST_URL_FALLBACK2}")
     print(f"Xray workers: {MAX_XRAY_WORKERS}")
+    print(f"GeoIP: {GEOIP_DB_PATH if _geoip_reader else 'не подключён (регионы будут Unknown для IP)'}")
     print(f"{'='*50}\n")
 
     start = time.time()
