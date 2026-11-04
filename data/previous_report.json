@@ -1,46 +1,46 @@
 {
   "schema_version": 2,
-  "checked_at": "2026-11-03T23:06:50+00:00",
-  "duration_seconds": 889.13,
+  "checked_at": "2026-11-04T04:58:16+00:00",
+  "duration_seconds": 863.02,
   "checked_count": 1000,
-  "raw_lines_found": 28415,
-  "total_found": 28415,
+  "raw_lines_found": 28664,
+  "total_found": 28664,
   "parsed": 1000,
   "dns_passed": 1000,
   "tcp_passed": 1000,
-  "protocol_passed": 4,
-  "published_count": 4,
+  "protocol_passed": 9,
+  "published_count": 9,
   "by_protocol": {
-    "vless": 4
+    "vless": 9
   },
   "by_region": {
-    "Unknown": 4
+    "Unknown": 9
   },
   "by_check_level": {
-    "protocol": 4
+    "protocol": 9
   },
   "failures": {
     "parse": 0,
     "dns": 0,
     "tcp": 0,
-    "protocol": 996,
-    "timeout": 30,
+    "protocol": 991,
+    "timeout": 39,
     "unsupported": 0
   },
-  "new_items": 4,
-  "removed_items": 19,
+  "new_items": 9,
+  "removed_items": 4,
   "stable_items": 0,
-  "critical_drop": true,
+  "critical_drop": false,
   "publish_allowed": true,
   "items": [
     {
-      "config_hash": "170de7f906247f28d16e2dcfba997532ae5fe247fa95ab11aa8a3171dc726ed0",
+      "config_hash": "7e40d3a2759f86b120a0685f704ed632a51e9b8de73cd1bab0d3a2804225f5da",
       "protocol": "vless",
       "region": "Unknown",
-      "checked_at": "2026-11-03T22:52:03+00:00",
+      "checked_at": "2026-11-04T04:43:54+00:00",
       "check_level": "protocol",
       "status": "working",
-      "latency": 0.361,
+      "latency": 0.714,
       "error_code": null,
       "levels_passed": [
         "parse",
@@ -50,13 +50,13 @@
       ]
     },
     {
-      "config_hash": "053135b5b992b61ca14fff5137861b3360203811af348fa8156d0be91550f2f1",
+      "config_hash": "55c0369a2d377796770ee07a58c2ae46b1e988400985d82f4d5ca1ede41f98f1",
       "protocol": "vless",
       "region": "Unknown",
-      "checked_at": "2026-11-03T22:52:03+00:00",
+      "checked_at": "2026-11-04T04:43:54+00:00",
       "check_level": "protocol",
       "status": "working",
-      "latency": 1.375,
+      "latency": 0.165,
       "error_code": null,
       "levels_passed": [
         "parse",
@@ -66,13 +66,13 @@
       ]
     },
     {
-      "config_hash": "9ddaaf99fe6bc3ab0988d8603fc18d82e69f0c2397bff29e19023d0c6f95a8e9",
+      "config_hash": "d129d834031d2f29f079c97bd38c063fa1a956269c153f1494be1af8583c7dbe",
       "protocol": "vless",
       "region": "Unknown",
-      "checked_at": "2026-11-03T22:52:03+00:00",
+      "checked_at": "2026-11-04T04:43:54+00:00",
       "check_level": "protocol",
       "status": "working",
-      "latency": 1.436,
+      "latency": 4.75,
       "error_code": null,
       "levels_passed": [
         "parse",
@@ -82,13 +82,93 @@
       ]
     },
     {
-      "config_hash": "a46aacbaea8bc7d0415c6fefd07da5063ebc17ddc4e29a205ef027570e441bfe",
+      "config_hash": "2b883bedfa4151e4278b9c44c1b43866aedf347c106a841ccf283511f7c618ba",
       "protocol": "vless",
       "region": "Unknown",
-      "checked_at": "2026-11-03T22:52:03+00:00",
+      "checked_at": "2026-11-04T04:43:54+00:00",
       "check_level": "protocol",
       "status": "working",
-      "latency": 1.057,
+      "latency": 2.774,
+      "error_code": null,
+      "levels_passed": [
+        "parse",
+        "dns",
+        "tcp",
+        "protocol"
+      ]
+    },
+    {
+      "config_hash": "722ae7d46713ecdf72b4c6e594182c88eacedf884217341f45f7e33a7c25e1a0",
+      "protocol": "vless",
+      "region": "Unknown",
+      "checked_at": "2026-11-04T04:43:55+00:00",
+      "check_level": "protocol",
+      "status": "working",
+      "latency": 1.155,
+      "error_code": null,
+      "levels_passed": [
+        "parse",
+        "dns",
+        "tcp",
+        "protocol"
+      ]
+    },
+    {
+      "config_hash": "8025358b92827f9e83eb868a293d65e7b47ddd211c5f984f36326a74e4267479",
+      "protocol": "vless",
+      "region": "Unknown",
+      "checked_at": "2026-11-04T04:43:55+00:00",
+      "check_level": "protocol",
+      "status": "working",
+      "latency": 0.458,
+      "error_code": null,
+      "levels_passed": [
+        "parse",
+        "dns",
+        "tcp",
+        "protocol"
+      ]
+    },
+    {
+      "config_hash": "28ef42eb8edf1b4c5ad61e485c29ba382ff18ced4aaabca9cda2f1075b589438",
+      "protocol": "vless",
+      "region": "Unknown",
+      "checked_at": "2026-11-04T04:43:55+00:00",
+      "check_level": "protocol",
+      "status": "working",
+      "latency": 1.267,
+      "error_code": null,
+      "levels_passed": [
+        "parse",
+        "dns",
+        "tcp",
+        "protocol"
+      ]
+    },
+    {
+      "config_hash": "ae9d9c136c5c417175d934b1b6596713f7ef524049646ffdac2668fdd77c947f",
+      "protocol": "vless",
+      "region": "Unknown",
+      "checked_at": "2026-11-04T04:43:55+00:00",
+      "check_level": "protocol",
+      "status": "working",
+      "latency": 1.253,
+      "error_code": null,
+      "levels_passed": [
+        "parse",
+        "dns",
+        "tcp",
+        "protocol"
+      ]
+    },
+    {
+      "config_hash": "c30afeaab6660dbb781e217c1d7f28ad002356d4b8dbdfa62534363c61809a65",
+      "protocol": "vless",
+      "region": "Unknown",
+      "checked_at": "2026-11-04T04:43:55+00:00",
+      "check_level": "protocol",
+      "status": "working",
+      "latency": 1.16,
       "error_code": null,
       "levels_passed": [
         "parse",
