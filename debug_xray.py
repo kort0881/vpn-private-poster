@@ -11,20 +11,46 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import requests
-from advanced_checker import (
+from poster_private import (  # ← ИСПРАВЛЕНО: poster_private, не advanced_checker
     build_xray_config,
     get_free_port,
-    mask_key,
     XRAY_BIN,
 )
 
 SRC = "https://raw.githubusercontent.com/kort0881/vpn-vless-configs-russia/refs/heads/main/data/githubmirror/clean/vless.txt"
 
 
-def debug_one(key: str):
+def validate_config(cfg: dict) -> tuple[bool, str]:
+    if not cfg or not cfg.get("outbounds"):
+        return False, "no_outbound"
+    out = cfg["outbounds"][0]
+    proto = out.get("protocol", "")
+    settings = out.get("settings", {})
+    stream = out.get("streamSettings", {})
+    sec = stream.get("security", "none")
+
+    if proto == "vless":
+        vnext = settings.get("vnext", [])
+        if not vnext or not vnext[0].get("users"):
+            return False, "vless_no_user"
+        if len(vnext[0]["users"][0].get("id", "")) < 32:
+            return False, "vless_bad_uuid"
+
+    if sec == "reality":
+        rs = stream.get("realitySettings", {})
+        if not rs.get("publicKey"):
+            return False, "reality_no_pbk"
+        if not rs.get("serverName"):
+            return False, "reality_no_sni"
+
+    return True, ""
+
+
+def debug_one(key: str, idx: int):
     print(f"\n{'=' * 70}")
-    print(f"KEY: {mask_key(key)}")
-    print(f"RAW: {key[:120]}")
+    print(f"KEY #{idx}")
+    print(f"FULL: {key}")
+    print(f"LEN:  {len(key)}")
 
     port = get_free_port()
     cfg = build_xray_config(key, port)
@@ -32,7 +58,14 @@ def debug_one(key: str):
         print("❌ build_xray_config -> None")
         return
 
-    print(f"\nCONFIG JSON:\n{json.dumps(cfg, indent=2)}")
+    ok, reason = validate_config(cfg)
+    print(f"\nVALIDATE: {'✅ OK' if ok else '❌ ' + reason}")
+
+    print(f"\nCONFIG JSON:\n{json.dumps(cfg, indent=2, ensure_ascii=False)}")
+
+    if not ok:
+        print("⏭  Xray не запускаем — конфиг невалиден по нашей проверке")
+        return
 
     tmpdir = tempfile.mkdtemp(prefix="xray_dbg_")
     cfg_path = os.path.join(tmpdir, "config.json")
@@ -50,7 +83,7 @@ def debug_one(key: str):
     if proc.poll() is not None:
         out = proc.stdout.read() or ""
         print(f"\n❌ Xray exited code={proc.returncode}")
-        print(f"FULL OUTPUT:\n{out}")
+        print(f"FULL STDERR/STDOUT:\n{out}")
     else:
         print(f"\n✅ Xray running on port {port}")
         proc.terminate()
@@ -80,8 +113,8 @@ def main():
         print("❌ Нет ключей")
         sys.exit(1)
 
-    for k in keys[:5]:
-        debug_one(k)
+    for i, k in enumerate(keys[:5], 1):
+        debug_one(k, i)
 
 
 if __name__ == "__main__":
