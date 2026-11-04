@@ -8,7 +8,7 @@ on:
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
 
     steps:
       - name: Checkout code
@@ -19,7 +19,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -28,7 +28,7 @@ jobs:
 
       - name: Cache Xray binary
         id: cache-xray
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ./bin
           key: xray-linux-64-v25.12.8
@@ -45,16 +45,17 @@ jobs:
       - name: Set XRAY_PATH
         run: echo "XRAY_PATH=$(pwd)/bin/xray" >> $GITHUB_ENV
 
+      - name: Download GeoIP DB
+        run: |
+          mkdir -p data
+          curl -sL "https://github.com/P3TERX/GeoLite.mmdb/raw/download/GeoLite2-Country.mmdb" -o data/GeoLite2-Country.mmdb
+          ls -la data/GeoLite2-Country.mmdb
+        continue-on-error: true
+
       - name: Configure Git
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-
-      - name: Debug xray (temporary)
-        env:
-          XRAY_BIN: ${{ env.XRAY_PATH }}
-        run: python debug_xray.py
-        continue-on-error: true
 
       - name: Run private poster
         env:
@@ -63,32 +64,27 @@ jobs:
           GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}
           TELEGRAM_DRY_RUN: "0"
           XRAY_BIN: ${{ env.XRAY_PATH }}
-          # AI для улучшения технического поста (ТЗ3 п.4). Нет ключа → fallback.
+          GEOIP_DB_PATH: ${{ github.workspace }}/data/GeoLite2-Country.mmdb
           AI_API_KEY: ${{ secrets.API_KEY }}
           AI_BASE_URL: https://api.groq.com/openai/v1
           MODEL_PRIMARY: openai/gpt-oss-120b
           MODEL_FALLBACK: openai/gpt-oss-20b
-          # Технический пост (subscription_update) публикуется автоматически.
-          # Контентные посты (content_draft) — нет (отдельный workflow).
           ADMIN_REVIEW_REQUIRED: "1"
           AUTO_PUBLISH: "0"
         run: python poster_private.py
 
       - name: Commit published log and reports
+        if: always()
         run: |
           git config --global user.name "GitHub Actions Bot"
           git config --global user.email "actions@github.com"
-          # Постер меняет: checked/* (файлы подписок), data/current+previous_report.json,
-          # data/diagnostics.jsonl, data/published.jsonl. Стейджим всё разом,
-          # иначе pull --rebase падает на unstaged changes.
           git add data/ checked/ 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "Новых записей нет — коммит не нужен"
-          else
-            git commit -m "Update published data — $(date -u +'%Y-%m-%d %H:%M UTC')"
-            # push_to_repo уже запушил checked/ — наш коммит поверх него (rebase)
-            git pull --rebase origin main
-            git push origin main
+            exit 0
           fi
+          git commit -m "Update published data — $(date -u +'%Y-%m-%d %H:%M UTC')" || true
+          git pull --rebase origin main || true
+          git push origin main || echo "⚠️ push failed (данные уже запушены в poster_private.py)"
         env:
           GH_TOKEN: ${{ secrets.VPNPRIVATEPOSTER }}
