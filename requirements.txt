@@ -1,6 +1,7 @@
 requests>=2.34.2
 PyYAML>=6.0.3
 feedparser>=6.0.14
+geoip2>=4.7.0
 
 # Тесты
 pytest>=9.1.1
