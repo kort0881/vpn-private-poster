@@ -1,41 +1,28 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — v34.3
+PRIVATE VPN POSTER — v34.4
 
-Ключевые изменения относительно v34.2:
+Ключевые изменения относительно v34.3:
 
-1. Порядок контрольных URL переставлен:
-   XRAY_TEST_URL       = https://cp.cloudflare.com/generate_204   (было api.ipify.org)
-   XRAY_TEST_URL_FB    = https://api.ipify.org?format=json
-   XRAY_TEST_URL_FB2   = http://www.gstatic.com/generate_204
-   Причина: api.ipify.org через часть Reality/TLS-конфигов отдаёт
-   connection_error, хотя туннель полностью рабочий. cp.cloudflare.com
-   в v6.3 стабильно давал ~10% pass rate, api.ipify — 0.1%.
+1. Добавлен validate_xray_config() — проверка конфига ДО запуска Xray.
+   Мусорные ключи (reality без pbk, короткий UUID, vision без TLS,
+   пустой sni) отсекаются за миллисекунды с причиной invalid_*,
+   вместо того чтобы запускать Xray и получать xray_crash через 3-8с.
 
-2. xray_check_key(): убран sleep(0.8) и добавлено _wait_for_port().
-   На 2-vCPU раннере при MAX_XRAY_WORKERS=3 Xray иногда стартует
-   1.5–3 секунды; sleep(0.8) → первый probe ловит Connection refused
-   → connection_error → break → ключ клеймится мёртвым. Теперь ждём
-   появления порта до 3 сек, процесс проверяем на падение.
+2. xray_check_key(): при xray_crash в diagnostics.jsonl пишется полный
+   stderr Xray (10 последних строк). Раньше reason обрезался до 80
+   символов, реальную причину ("invalid public key", "unmarshal errors")
+   было не видно.
 
-3. Fail-fast по connection_error/timeout перенесён с ПЕРВОГО URL
-   на ВТОРОЙ. Один connection_error через конкретный адресат ещё не
-   значит, что туннель мёртв — пробуем второй URL. Если и второй
-   даёт connection_error/timeout — тогда break (туннель реально мёртв).
-   Это компромисс: +2–8с на мёртвый ключ, но pass rate × 50–100.
+3. reason при xray_crash расширен до 500 символов (5 строк stderr).
 
-4. MAX_XRAY_WORKERS снижен 3 → 2. На GitHub Actions ubuntu-latest
-   (2 vCPU) 3 параллельных Xray + Python-потоки не укладываются в
-   таймаут старта; 2 — стабильно.
-
-Всё остальное из v34.2/v34.1/v34 сохранено:
-- _resolve_ip_cached с UnicodeError
-- get_region_from_key с try/except
-- multi-probe по трём URL
-- should_publish_update: пост только при существенном изменении
+Всё остальное из v34.3/v34.2 сохранено:
+- cp.cloudflare.com первым URL
+- _wait_for_port вместо sleep(0.8)
+- fail-fast после 2-го URL (не 1-го)
+- MAX_XRAY_WORKERS = 2
 - L1 parse / L2 dns / L3 tcp / L4 protocol
 - запрет TCP-fallback: публикуются только protocol_passed
-- hysteria2/hy2 → tcp_only (не публикуется)
 """
 from __future__ import annotations
 
@@ -100,7 +87,6 @@ BRANCH = "main"
 XRAY_BIN = os.environ.get("XRAY_BIN", os.path.join(SCRIPT_DIR, "bin", "xray"))
 XRAY_ASSETS_DIR = os.environ.get("XRAY_ASSETS_DIR", "")
 
-# v34.3: cp.cloudflare.com первым — стабильный 204 через почти любой туннель.
 XRAY_TEST_URL = os.environ.get(
     "XRAY_TEST_URL", "https://cp.cloudflare.com/generate_204"
 )
@@ -111,7 +97,6 @@ XRAY_TEST_URL_FALLBACK2 = os.environ.get(
     "XRAY_TEST_URL_FALLBACK2", "http://www.gstatic.com/generate_204"
 )
 
-# v34.3: 3 параллельных Xray на 2-vCPU GitHub Runner не укладываются в старт.
 MAX_XRAY_WORKERS = 2
 
 MIN_NEW_ITEMS_FOR_POST = int(os.environ.get("MIN_NEW_ITEMS_FOR_POST", "3"))
@@ -384,7 +369,6 @@ def _is_ip(host: str) -> bool:
 
 
 def _resolve_ip_cached(host: str) -> str | None:
-    """DNS resolve с простым in-memory кэшем. Ловим UnicodeError (IDNA)."""
     if host in _dns_cache:
         return _dns_cache[host]
     try:
@@ -696,13 +680,6 @@ def _probe(url: str, proxies: dict, timeout: float) -> tuple[int | None, str | N
 
 
 def _wait_for_port(port: int, timeout: float, proc) -> bool:
-    """
-    v34.3: ждёт, пока Xray начнёт слушать локальный порт.
-
-    Возвращает:
-      True  — порт открыт, можно делать probe;
-      False — либо процесс упал, либо не открыл порт за timeout.
-    """
     deadline = time.time() + timeout
     while time.time() < deadline:
         if proc.poll() is not None:
@@ -713,6 +690,71 @@ def _wait_for_port(port: int, timeout: float, proc) -> bool:
         except OSError:
             time.sleep(0.05)
     return False
+
+
+def validate_xray_config(config: dict) -> tuple[bool, str]:
+    """v34.4: проверка конфига ДО запуска Xray. Убирает xray_crash на мусорных ключах."""
+    if not config or not config.get("outbounds"):
+        return False, "no_outbound"
+    out = config["outbounds"][0]
+    protocol = out.get("protocol", "")
+    settings = out.get("settings", {})
+    stream = out.get("streamSettings", {})
+    security = stream.get("security", "none")
+    network = stream.get("network", "tcp")
+
+    if protocol == "vless":
+        vnext = settings.get("vnext", [])
+        if not vnext:
+            return False, "vless_no_vnext"
+        node = vnext[0]
+        if not node.get("address") or not node.get("port"):
+            return False, "vless_no_address"
+        users = node.get("users", [])
+        if not users or not users[0].get("id"):
+            return False, "vless_no_uuid"
+        if len(users[0]["id"]) < 32:
+            return False, "vless_bad_uuid"
+        if users[0].get("flow") == "xtls-rprx-vision" and security not in ("tls", "reality"):
+            return False, "vision_without_tls"
+
+    elif protocol == "vmess":
+        vnext = settings.get("vnext", [])
+        if not vnext or not vnext[0].get("users"):
+            return False, "vmess_no_user"
+        if not vnext[0]["users"][0].get("id"):
+            return False, "vmess_no_id"
+
+    elif protocol == "trojan":
+        servers = settings.get("servers", [])
+        if not servers or not servers[0].get("password"):
+            return False, "trojan_no_password"
+
+    elif protocol == "shadowsocks":
+        servers = settings.get("servers", [])
+        if not servers:
+            return False, "ss_no_server"
+        if not servers[0].get("method") or not servers[0].get("password"):
+            return False, "ss_no_auth"
+
+    if security == "reality":
+        rs = stream.get("realitySettings", {})
+        if not rs.get("publicKey"):
+            return False, "reality_no_pbk"
+        if not rs.get("serverName"):
+            return False, "reality_no_sni"
+
+    if security == "tls":
+        ts = stream.get("tlsSettings", {})
+        if not ts.get("serverName"):
+            return False, "tls_no_sni"
+
+    if network == "ws":
+        ws = stream.get("wsSettings", {})
+        if not ws.get("path"):
+            return False, "ws_no_path"
+
+    return True, ""
 
 
 def xray_check_key(
@@ -727,6 +769,11 @@ def xray_check_key(
     config = build_xray_config(key, proxy_port)
     if config is None:
         return False, None, "protocol_not_supported"
+
+    # v34.4: валидация ДО запуска Xray — отсекает мусорные ключи за миллисекунды
+    valid, reason = validate_xray_config(config)
+    if not valid:
+        return False, None, f"invalid_{reason}"
 
     tmpdir = tempfile.mkdtemp(prefix="xray_check_")
     config_path = os.path.join(tmpdir, "config.json")
@@ -754,17 +801,26 @@ def xray_check_key(
         finally:
             logf.close()
 
-        # v34.3: вместо sleep(0.8) — ждём реального открытия порта до 3 сек.
         if not _wait_for_port(proxy_port, 3.0, proc):
             if proc.poll() is not None:
+                # v34.4: полный stderr в diagnostics
                 reason = "xray_crash"
+                full_log_lines: list[str] = []
                 try:
                     with open(log_path, "r", encoding="utf-8", errors="ignore") as lf:
-                        lines = [ln.strip() for ln in lf if ln.strip()]
-                    if lines:
-                        reason = f"xray_crash:{lines[-1][:80]}"
+                        full_text = lf.read()
+                    full_log_lines = [ln.strip() for ln in full_text.split("\n") if ln.strip()]
+                    if full_log_lines:
+                        joined = " | ".join(full_log_lines[-5:])
+                        reason = f"xray_crash:{joined[:500]}"
                 except OSError:
                     pass
+                append_diagnostics({
+                    "event": "xray_crash",
+                    "config_hash": config_hash(key),
+                    "masked": mask_key(key),
+                    "stderr_lines": full_log_lines[-10:],
+                })
                 return False, None, reason
             return False, None, "xray_startup_timeout"
 
@@ -782,11 +838,6 @@ def xray_check_key(
             if status is not None and 200 <= status < 400:
                 return True, round(elapsed, 3), None
             last_err = err or (f"http_{status}" if status is not None else "unknown_error")
-            # v34.3: connection_error/timeout на ПЕРВОМ URL не означает,
-            # что туннель мёртв — конкретно cp.cloudflare.com мог быть
-            # заблокирован на стороне сервера. Пробуем второй URL.
-            # Только после второго connection_error/timeout считаем
-            # туннель мёртвым (иначе время на мёртвый ключ вырастает втрое).
             if last_err in ("connection_error", "timeout") and i >= 1:
                 break
 
@@ -1377,7 +1428,7 @@ def load_and_clean(settings: dict) -> tuple[list[str], int, int]:
 
 def main() -> int:
     settings = load_settings()
-    version = "PRIVATE POSTER v34.3 (cp.cloudflare.com first, port wait, fail-fast after 2nd URL)"
+    version = "PRIVATE POSTER v34.4 (config validator + full stderr in diagnostics)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     print(f"Xray binary: {XRAY_BIN}")
