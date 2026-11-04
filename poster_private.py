@@ -1,54 +1,41 @@
 #!/usr/bin/env python3
 """
-PRIVATE VPN POSTER — v34.2 (фикс IndentationError + connection_error fail-fast)
+PRIVATE VPN POSTER — v34.3
 
-Изменения относительно v34.1:
-- xray_check_key(): исправлен IndentationError (строка last_err имела
-  16 пробелов вместо 8 после вставки блока v34.2 в предыдущей версии).
-- xray_check_key(): multi-probe теперь прерывается после первого
-  connection_error/timeout — эти ошибки означают проблему самого
-  туннеля (не конкретного контрольного сайта), поэтому пробовать
-  оставшиеся 2 URL через тот же сломанный туннель бессмысленно и
-  утраивает время ожидания на каждый мёртвый ключ (в логе это подняло
-  длительность прогона с 813с до 1130с). Multi-probe остаётся полезен
-  только при плохом HTTP-статусе (например http_503).
+Ключевые изменения относительно v34.2:
 
-Изменения относительно v34 (сохранены из v34.1):
-- _resolve_ip_cached(): добавлен перехват UnicodeError (IDNA-кодирование
-  падает на слишком длинных/кривых hostname: "UnicodeError: label too
-  long"). Раньше ловился только OSError, из-за чего один битый хост в
-  списке источников валил весь процесс проверки.
-- get_region_from_key(): добавлена дополнительная защита try/except
-  вокруг вызова _resolve_ip_cached()/_is_ip() и вокруг host.lower().split(".")
+1. Порядок контрольных URL переставлен:
+   XRAY_TEST_URL       = https://cp.cloudflare.com/generate_204   (было api.ipify.org)
+   XRAY_TEST_URL_FB    = https://api.ipify.org?format=json
+   XRAY_TEST_URL_FB2   = http://www.gstatic.com/generate_204
+   Причина: api.ipify.org через часть Reality/TLS-конфигов отдаёт
+   connection_error, хотя туннель полностью рабочий. cp.cloudflare.com
+   в v6.3 стабильно давал ~10% pass rate, api.ipify — 0.1%.
 
-Изменения относительно v33 (сохранены из v34):
-1. checked_count: в отчёт добавлено реальное количество проверенных
-   ключей (после обрезки max_keys_to_check). Поле total_found
-   переименовано по смыслу в raw_lines_found — используется только для
-   диагностики, НЕ для текста поста.
-2. should_publish_update(): пост в Telegram публикуется только при
-   существенном изменении (new_items>=3 ИЛИ removed_items>=10 ИЛИ
-   |Δprotocol_passed|>=20% ИЛИ critical_drop=true). checked/ и push в
-   GitHub всё равно обновляются каждый прогон.
-3. xray_check_key(): multi-probe — fallback на резервные контрольные URL
-   срабатывает не только при исключении, но и при плохом HTTP-статусе.
-4. get_region_from_key(): регион определяется по IP (опциональный GeoIP
-   через GEOIP_DB_PATH), а не только по TLD домена. Если определить
-   регион нельзя — bucket "Unknown", а не "Other".
+2. xray_check_key(): убран sleep(0.8) и добавлено _wait_for_port().
+   На 2-vCPU раннере при MAX_XRAY_WORKERS=3 Xray иногда стартует
+   1.5–3 секунды; sleep(0.8) → первый probe ловит Connection refused
+   → connection_error → break → ключ клеймится мёртвым. Теперь ждём
+   появления порта до 3 сек, процесс проверяем на падение.
 
-Изменения относительно v32 (сохранены):
-- Удалена ss:// → vless:// конвертация (критический баг).
-- Поддержка схем: vless, vmess, trojan, ss, hysteria2, hy2.
-- Уровни проверки L1 (parsing) / L2 (DNS) / L3 (TCP) / L4 (protocol).
-- Запрет TCP-fallback: публикуются только ключи с protocol_passed=true.
-- Xray: свободные локальные порты, уникальные tmp-диры, таймауты,
-  лимит параллельных процессов, безопасные сообщения об ошибках.
-- config/settings.yaml + переопределение переменными окружения.
-- Отчёты: data/current_report.json, data/previous_report.json,
-  data/diagnostics.jsonl.
-- checked/manifest.json, атомарная замена, защита от пустого результата.
-- replace_hosts по умолчанию выключен.
-- В логах и отчётах нет полных URL конфигураций (sha256 / маскированный host).
+3. Fail-fast по connection_error/timeout перенесён с ПЕРВОГО URL
+   на ВТОРОЙ. Один connection_error через конкретный адресат ещё не
+   значит, что туннель мёртв — пробуем второй URL. Если и второй
+   даёт connection_error/timeout — тогда break (туннель реально мёртв).
+   Это компромисс: +2–8с на мёртвый ключ, но pass rate × 50–100.
+
+4. MAX_XRAY_WORKERS снижен 3 → 2. На GitHub Actions ubuntu-latest
+   (2 vCPU) 3 параллельных Xray + Python-потоки не укладываются в
+   таймаут старта; 2 — стабильно.
+
+Всё остальное из v34.2/v34.1/v34 сохранено:
+- _resolve_ip_cached с UnicodeError
+- get_region_from_key с try/except
+- multi-probe по трём URL
+- should_publish_update: пост только при существенном изменении
+- L1 parse / L2 dns / L3 tcp / L4 protocol
+- запрет TCP-fallback: публикуются только protocol_passed
+- hysteria2/hy2 → tcp_only (не публикуется)
 """
 from __future__ import annotations
 
@@ -112,12 +99,20 @@ BRANCH = "main"
 
 XRAY_BIN = os.environ.get("XRAY_BIN", os.path.join(SCRIPT_DIR, "bin", "xray"))
 XRAY_ASSETS_DIR = os.environ.get("XRAY_ASSETS_DIR", "")
-XRAY_TEST_URL = os.environ.get("XRAY_TEST_URL", "https://api.ipify.org?format=json")
-XRAY_TEST_URL_FALLBACK = os.environ.get("XRAY_TEST_URL_FALLBACK", "http://1.1.1.1")
-XRAY_TEST_URL_FALLBACK2 = os.environ.get(
-    "XRAY_TEST_URL_FALLBACK2", "https://cp.cloudflare.com/generate_204"
+
+# v34.3: cp.cloudflare.com первым — стабильный 204 через почти любой туннель.
+XRAY_TEST_URL = os.environ.get(
+    "XRAY_TEST_URL", "https://cp.cloudflare.com/generate_204"
 )
-MAX_XRAY_WORKERS = 3
+XRAY_TEST_URL_FALLBACK = os.environ.get(
+    "XRAY_TEST_URL_FALLBACK", "https://api.ipify.org?format=json"
+)
+XRAY_TEST_URL_FALLBACK2 = os.environ.get(
+    "XRAY_TEST_URL_FALLBACK2", "http://www.gstatic.com/generate_204"
+)
+
+# v34.3: 3 параллельных Xray на 2-vCPU GitHub Runner не укладываются в старт.
+MAX_XRAY_WORKERS = 2
 
 MIN_NEW_ITEMS_FOR_POST = int(os.environ.get("MIN_NEW_ITEMS_FOR_POST", "3"))
 MIN_REMOVED_ITEMS_FOR_POST = int(os.environ.get("MIN_REMOVED_ITEMS_FOR_POST", "10"))
@@ -389,15 +384,7 @@ def _is_ip(host: str) -> bool:
 
 
 def _resolve_ip_cached(host: str) -> str | None:
-    """
-    DNS resolve с простым in-memory кэшем на один запуск.
-
-    v34.1: помимо socket.gaierror/OSError ловим UnicodeError — он
-    возникает при кодировании кривого/слишком длинного hostname в IDNA
-    (например, обрезанный или битый host из конфигурации: "UnicodeError:
-    label too long"). Раньше это не перехватывалось и валило весь процесс
-    проверки (traceback в GitHub Actions на одном плохом ключе из 1000).
-    """
+    """DNS resolve с простым in-memory кэшем. Ловим UnicodeError (IDNA)."""
     if host in _dns_cache:
         return _dns_cache[host]
     try:
@@ -416,8 +403,6 @@ def get_region_from_key(key: str) -> str:
     try:
         ip = host if _is_ip(host) else _resolve_ip_cached(host)
     except (socket.gaierror, UnicodeError, OSError):
-        # Дополнительная защита на случай экзотических ошибок кодирования
-        # хоста, не покрытых внутри _resolve_ip_cached/_is_ip.
         ip = None
 
     if _geoip_reader and ip:
@@ -710,6 +695,26 @@ def _probe(url: str, proxies: dict, timeout: float) -> tuple[int | None, str | N
         return None, safe_error(exc)
 
 
+def _wait_for_port(port: int, timeout: float, proc) -> bool:
+    """
+    v34.3: ждёт, пока Xray начнёт слушать локальный порт.
+
+    Возвращает:
+      True  — порт открыт, можно делать probe;
+      False — либо процесс упал, либо не открыл порт за timeout.
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            return False
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                return True
+        except OSError:
+            time.sleep(0.05)
+    return False
+
+
 def xray_check_key(
     key: str,
     proxy_port: int,
@@ -749,39 +754,40 @@ def xray_check_key(
         finally:
             logf.close()
 
-        time.sleep(0.8)
-        if proc.poll() is not None:
-            reason = "xray_crash"
-            try:
-                with open(log_path, "r", encoding="utf-8", errors="ignore") as lf:
-                    lines = [ln.strip() for ln in lf if ln.strip()]
-                if lines:
-                    tail = lines[-1][:80]
-                    reason = f"xray_crash:{tail}"
-            except OSError:
-                pass
-            return False, None, reason
+        # v34.3: вместо sleep(0.8) — ждём реального открытия порта до 3 сек.
+        if not _wait_for_port(proxy_port, 3.0, proc):
+            if proc.poll() is not None:
+                reason = "xray_crash"
+                try:
+                    with open(log_path, "r", encoding="utf-8", errors="ignore") as lf:
+                        lines = [ln.strip() for ln in lf if ln.strip()]
+                    if lines:
+                        reason = f"xray_crash:{lines[-1][:80]}"
+                except OSError:
+                    pass
+                return False, None, reason
+            return False, None, "xray_startup_timeout"
 
-        proxies = {"http": f"http://127.0.0.1:{proxy_port}", "https": f"http://127.0.0.1:{proxy_port}"}
+        proxies = {
+            "http": f"http://127.0.0.1:{proxy_port}",
+            "https": f"http://127.0.0.1:{proxy_port}",
+        }
         probe_urls = [XRAY_TEST_URL, XRAY_TEST_URL_FALLBACK, XRAY_TEST_URL_FALLBACK2]
 
         last_err = "protocol_failed"
-        for url in probe_urls:
+        for i, url in enumerate(probe_urls):
             start = time.time()
             status, err = _probe(url, proxies, timeout)
             elapsed = time.time() - start
             if status is not None and 200 <= status < 400:
                 return True, round(elapsed, 3), None
             last_err = err or (f"http_{status}" if status is not None else "unknown_error")
-            # v34.2: connection_error/timeout — проблема самого туннеля
-            # (локальный прокси Xray не отвечает или обрыв на стороне
-            # сервера), а не конкретного контрольного сайта. Пробовать
-            # оставшиеся URL через тот же сломанный туннель бессмысленно
-            # и утраивает время ожидания на каждый мёртвый ключ — именно
-            # это подняло длительность прогона с 813с до 1130с.
-            # Multi-probe остаётся полезен только при плохом HTTP-статусе
-            # (например http_503) — там смена адресата реально помогает.
-            if last_err in ("connection_error", "timeout"):
+            # v34.3: connection_error/timeout на ПЕРВОМ URL не означает,
+            # что туннель мёртв — конкретно cp.cloudflare.com мог быть
+            # заблокирован на стороне сервера. Пробуем второй URL.
+            # Только после второго connection_error/timeout считаем
+            # туннель мёртвым (иначе время на мёртвый ключ вырастает втрое).
+            if last_err in ("connection_error", "timeout") and i >= 1:
                 break
 
         return False, None, last_err
@@ -1371,12 +1377,14 @@ def load_and_clean(settings: dict) -> tuple[list[str], int, int]:
 
 def main() -> int:
     settings = load_settings()
-    version = "PRIVATE POSTER v34.2 (фикс IndentationError, connection_error fail-fast)"
+    version = "PRIVATE POSTER v34.3 (cp.cloudflare.com first, port wait, fail-fast after 2nd URL)"
     print(f"\n{'='*50}")
     print(f"{version} (DRY RUN = {'ON' if DRY else 'OFF'})")
     print(f"Xray binary: {XRAY_BIN}")
     print(f"Макс. ключей: {settings['max_keys_to_check']}, min_publish: {settings['min_publish_count']}, "
           f"replace_hosts: {settings['replace_hosts']}")
+    print(f"Контрольные URL: {XRAY_TEST_URL} | {XRAY_TEST_URL_FALLBACK} | {XRAY_TEST_URL_FALLBACK2}")
+    print(f"Xray workers: {MAX_XRAY_WORKERS}")
     print(f"{'='*50}\n")
 
     start = time.time()
