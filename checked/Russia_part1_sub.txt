@@ -1,1 +1,0 @@
-ss://727a9178-d7f0-4142-8205-b0d19959ded0@de-2.ffpn.pro:443?security=reality&encryption=none&pbk=DCpi9-1rSXxBnEIAQ9U3mTqHivk7vHJRV_T2pWw5vCc&headerType=none&fp=firefox&type=tcp&flow=xtls-rprx-vision&sni=de-2.ffpn.pro&sid=681fc2dd643bc2f3#[3513][RU][0][SS][None][free1_vpn][2026-11-01][2026-11-04
