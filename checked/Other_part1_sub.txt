@@ -1,2 +1,5 @@
-trojan://5t6i121em5lkmsmk@149.248.50.252:46977?security=tls&sni=ca001.zestapp778.com&type=tcp#4Sarina-8201c5d65a
-ss://YWVzLTI1Ni1nY206ZzVNZUQ2RnQzQ1dsSklk@51.222.155.32:5003#%F0%9F%87%A8%F0%9F%87%A6%20AetrisVPN
+ss://1f8cf47a-b66a-4916-979f-26edfcf44eea@185.95.231.156:443?security=reality&encryption=none&pbk=8eXftARun6KH38UZhuqIfPR1VF2DLS9RMBZEnF5k6To&host=%2F%3FTELEGRAM---MARAMBASHI---MARAMBASHI---MARAMBASHI---MARAMBASHI&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=www.apple.com&sid=a3a578ab#[889][IL][0][SS][None][marambashi][2026-11-04][2026-11-07
+ss://YWVzLTI1Ni1nY206WlJwZ2FCZUd4dEVOSVhndmhwa1pCS3o5R25XUlMyZFljeDlPK2EyaXdOND0=@151.241.19.36:19999#%5Bermaozi%2Fget_subscribe%5D%F0%9F%87%B3%F0%9F%87%B1%5Bwww.v2nodes.com%5D%20ss-NL-1614...
+ss://YWVzLTI1Ni1nY206Y2RCSURWNDJEQ3duZklO@51.79.64.198:8119#%5Bermaozi%2Fget_subscribe%5D%F0%9F%8F%B3%5Bwww.v2nodes.com%5D%20ss-%20%233
+ss://a346c521-7a7f-452b-9356-a4893feb5982@62.133.63.45:8444?mode=gun&security=reality&encryption=none&authority=%2F%3FTELEGRAM---MARAMBASHI---MARAMBASHI---MARAMBASHI---MARAMBASHI&pbk=FWitre1jinQR7qz5HQ0q2Q4Gg9xA9B0SyizCziN7Ch0&fp=chrome&type=grpc&serviceName=GunService&sni=github.com&sid=457fab2ac885dbe0#[10202][TR][0][SS][None][marambashi][2026-11-01][2026-11-07
+ss://db80088c-32a1-4cb8-a907-0f3cb7844152@it1.japancase.site:443?encryption=none&flow=xtls-rprx-vision&fp=&pbk=zEntiD6D81wY__YHPvIw78e09CBIgYkyQ5meIo7c_hg&security=reality&sid=41ae8e266bc3346f&sni=it1.japancase.site&type=tcp#[12223][AM][0][SS][None][oneclickvpnkeys][2026-11-05][2026-11-07
