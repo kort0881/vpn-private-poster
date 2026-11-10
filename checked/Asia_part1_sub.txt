@@ -1,4 +1,2 @@
-ss://YWVzLTEyOC1nY206c2hhZG93c29ja3M=@149.22.87.204:443#%5Bermaozi%2Fget_subscribe%5D%F0%9F%87%AF%F0%9F%87%B5%5Bwww.v2nodes.com%5D%20ss-JP-5141...
-ss://YWVzLTI1Ni1nY206WlJwZ2FCZUd4dEVOSVhndmhwa1pCS3o5R25XUlMyZFljeDlPK2EyaXdOND0=@149.88.107.74:19999#%5Bermaozi%2Fget_subscribe%5D%F0%9F%87%B8%F0%9F%87%AC%5Bwww.v2nodes.com%5D%20ss-SG-1615...%20%232
-ss://YWVzLTI1Ni1nY206bEdxczk1UWtGSG8yTlY=@141.164.45.187:5498#@Vip_Security
-vless://c1c04450-bf71-4049-ad0c-9cf6d94d9f1f@60.248.219.78:443?encryption=none&security=tls&sni=ty986gfazs.cainiaohub.xyz&allowInsecure=1&insecure=1&type=ws&path=%2F81574b6b-c9d7-44a0-b83d-dad56e8cb530&host=ty986gfazs.cainiaohub.xyz#%F0%9F%87%B9%F0%9F%87%BC%20AetrisVPN
+trojan://5t6i121em5lkmsmk@158.247.255.150:48851?security=tls&fp=firefox&sni=kr002.zestapp778.com#4FreeIran-8dfbe00225
+ss://9d9a048b-3aea-4b3e-b106-1106bf301feb@54.251.9.130:24146?encryption=none&flow=xtls-rprx-vision&type=raw&security=reality&sni=www.intel.com&fp=firefox&pbk=VeluC9A7XDurAWQNgXKShS2SJSgoK79QHFgiAMYrvGo&sid=7205d9079521832c&headertype=none#[4575][SG][0][SS][None][DeamNet_Proxy][2026-11-08][2026-11-10
