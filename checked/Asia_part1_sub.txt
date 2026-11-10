@@ -1,2 +1,4 @@
-trojan://5t6i121em5lkmsmk@158.247.255.150:48851?security=tls&fp=firefox&sni=kr002.zestapp778.com#4FreeIran-8dfbe00225
-ss://9d9a048b-3aea-4b3e-b106-1106bf301feb@54.251.9.130:24146?encryption=none&flow=xtls-rprx-vision&type=raw&security=reality&sni=www.intel.com&fp=firefox&pbk=VeluC9A7XDurAWQNgXKShS2SJSgoK79QHFgiAMYrvGo&sid=7205d9079521832c&headertype=none#[4575][SG][0][SS][None][DeamNet_Proxy][2026-11-08][2026-11-10
+ss://2022-blake3-aes-128-gcm:b7I6g7l7fJhBaMInJ+zkzw==@amasoid.ddns.net:14514#TW
+trojan://HutaoCloud@185.220.238.77:11543?security=tls&sni=185.220.238.77&allowInsecure=1&insecure=1&type=ws&path=%2Fapi&host=185.220.238.77#%F0%9F%87%AA%F0%9F%87%BA%20AetrisVPN
+trojan://sshs8_6481354771@86.38.247.109:2087?security=tls&sni=ul-singapore1.09vpn.com&fp=random&allowInsecure=1&insecure=1&type=tcp#%E2%9A%A0%EF%B8%8F%20%F0%9F%87%B8%F0%9F%87%AC%20%D0%A1%D0%B8%D0%BD%D0%B3%D0%B0%D0%BF%D1%83%D1%80%20%5B%23%D0%A0%D0%9A%D0%9F%5D
+ss://YWVzLTI1Ni1nY206M2VPRmVOc3NkZTdQWVlNdg@84.247.155.196:443#%F0%9F%8F%B4%20%D0%9D%D0%B5%D0%B8%D0%B7%D0%B2%D0%B5%D1%81%D1%82%D0%BD%D1%8B%D0%B9%20%5B%23%D0%A0%D0%9A%D0%9F%5D
