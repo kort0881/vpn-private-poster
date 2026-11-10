@@ -1,2 +1,0 @@
-ss://30572b57-f5ab-4eb8-82d4-a24d399b99f6@46.29.255.123:59539?security=reality&encryption=none&pbk=R6mPqCsjZMWauci4LHw7Qp1LGKmBd-sxMXplyOn9bSQ&headerType=none&fp=firefox&type=tcp&flow=xtls-rprx-vision&sni=cloudflare-dns.com#[1485][SC][0][SS][None][v2rayngvpn][2026-11-04][2026-11-07
-ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpFbWJNc3REampCTnR4RmMw@20.164.217.73:443#4Kian-ccbcb38ab9
