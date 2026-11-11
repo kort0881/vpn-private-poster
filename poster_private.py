@@ -1032,14 +1032,27 @@ def write_report(report: dict) -> None:
 
 def build_report(
     results: list[dict],
-    raw_lines_found: int,
-    checked_count: int,
-    parsed: int,
-    duration: float,
-    publish_allowed: bool,
-    published_count: int,
-    settings: dict,
+    raw_lines_found: int = 0,
+    checked_count: int = 0,
+    parsed: int = 0,
+    duration: float = 0.0,
+    publish_allowed: bool = False,
+    published_count: int = 0,
+    settings: dict | None = None,
+    *,
+    total_found: int | None = None,
 ) -> dict:
+    """Собрать отчёт проверки.
+
+    Позиционный контракт (raw_lines_found, checked_count, ...) сохранён для
+    вызовов из пайплайна. Дополнительно принимается keyword total_found —
+    синоним raw_lines_found, которым пользуются внешние вызовы и тесты.
+    """
+    if total_found is not None:
+        raw_lines_found = total_found
+    if not checked_count:
+        checked_count = parsed or len(results)
+    settings = settings or {}
     working = [r for r in results if r["status"] == "working"]
     protocol_passed = [r for r in results if "protocol" in r.get("levels_passed", []) and r["status"] == "working"]
     tcp_passed = [r for r in results if "tcp" in r.get("levels_passed", [])]

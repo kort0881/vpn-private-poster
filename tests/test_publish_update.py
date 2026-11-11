@@ -74,7 +74,10 @@ class TestNewPostContent:
 
     def test_region_unknown_instead_of_other(self):
         post = pu.build_fallback_post(REPORT, FILE_META)["post"]
-        assert "Region unknown" in post
+        # v2: «Other» и «Unknown» — неопределённый регион, по-русски.
+        # Английской заглушки «Region unknown» и сырого «Other» в тексте быть не должно.
+        assert "Регион не определён" in post
+        assert "Region unknown" not in post
         assert "Other" not in post
 
     def test_fallback_template_when_ai_absent(self, no_ai, pub_env, capsys):
