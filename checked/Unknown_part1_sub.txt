@@ -1,2 +1,0 @@
-trojan://bpb-trojan@singapore.com:443?security=tls&sni=kargar001.pages.dev&alpn=h3&fp=randomized&allowlnsecure=1&type=ws&host=kargar001.pages.dev&path=%2Ftr%3Fed%3D2560#4Sarina-617d959c73
-ss://9443badf-414f-4b12-b19a-7cc2c7431163@103.31.4.75:8443?path=%2Fman&security=tls&encryption=none&insecure=0&host=moz.ar-marz.fun&fp=firefox&type=ws&allowInsecure=0&sni=moz.ar-marz.fun#%40ConfigV2RayNG
