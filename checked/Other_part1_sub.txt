@@ -1,2 +1,2 @@
-ss://25e16692-d097-4e69-9e2d-8415609c1968@78.135.73.47:443?security=reality&encryption=none&pbk=sZAJkAu23wp1WKY-qeaeiwR38izP5OyfhumoE9xhbB8&headerType=&fp=chrome&type=tcp&flow=xtls-rprx-vision-udp443&sni=www.datadoghq.com&sid=f46cd3ea3d1eb72d#[1073][TR][0][SS][None][v2rayNG_Matsuri][2026-11-02][2026-11-10
-ss://YWVzLTI1Ni1nY206ekROVmVkUkZQUWV4Rzl2@51.222.141.125:445#%5Bermaozi%2Fget_subscribe%5D%F0%9F%87%A8%F0%9F%87%A6%5Bwww.v2nodes.com%5D%20ss-CA-1559...
+ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTp6SklOaEVybENYQnB5UDk1@20.164.204.82:443#%F0%9F%87%BF%F0%9F%87%A6%40FreakConfig
+ss://YWVzLTI1Ni1nY206ZzVNZUQ2RnQzQ1dsSklk@51.222.155.32:5003#%F0%9F%87%A8%F0%9F%87%A6%20AetrisVPN
