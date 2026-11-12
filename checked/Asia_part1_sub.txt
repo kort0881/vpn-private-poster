@@ -1,1 +1,2 @@
-ss://YWVzLTI1Ni1nY206WlJwZ2FCZUd4dEVOSVhndmhwa1pCS3o5R25XUlMyZFljeDlPK2EyaXdOND0=@51.79.228.131:19999#%5Bermaozi%2Fget_subscribe%5D%F0%9F%87%B8%F0%9F%87%AC%5Bwww.v2nodes.com%5D%20ss-SG-1616...
+ss://YWVzLTI1Ni1nY206WlJwZ2FCZUd4dEVOSVhndmhwa1pCS3o5R25XUlMyZFljeDlPK2EyaXdOND0=@149.88.107.47:19999#%5Bermaozi%2Fget_subscribe%5D%F0%9F%87%B8%F0%9F%87%AC%5Bwww.v2nodes.com%5D%20ss-SG-1615...%20%233
+trojan://Z5lvhmLqSc@matrix.phonicsindia.mobi:48994?type=tcp&headerType=none&security=tls&fp=chrome&sni=m.microsoft.com#4Nika-8a5b63abc7
