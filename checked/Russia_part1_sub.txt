@@ -1,0 +1,2 @@
+ss://32b5ca9b-3f81-4031-965d-e8b074216e8d@201.24.121.243:443?alpn=h2&encryption=none&fp=chrome&security=tls&serviceName=vlgrpc&sni=kk-ru24a1.testkknegr.online&type=grpc#[1544][RU][0][SS][None][oneclickvpnkeys][2026-11-04][2026-11-10
+ss://4777d90d-265b-4927-a0d1-63f36ed1421c@193.160.208.240:443?encryption=none&fp=firefox&mode=auto&path=%2Fassets%2Ftwru01%2F&security=tls&sni=193.160.208.240&type=xhttp#[2044][RU][0][SS][None][oneclickvpnkeys][2026-11-04][2026-11-10
