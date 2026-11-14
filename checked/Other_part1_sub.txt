@@ -1,2 +1,6 @@
-trojan://5t6i121em5lkmsmk@149.104.87.125:15083?security=tls&sni=mx001.zestapp778.com&fp=firefox#MX
-ss://YWVzLTI1Ni1nY206WlJwZ2FCZUd4dEVOSVhndmhwa1pCS3o5R25XUlMyZFljeDlPK2EyaXdOND0=@151.241.19.29:19999#%F0%9F%87%A6%F0%9F%87%AAAE-151.241.19.29-0097
+ss://YWVzLTI1Ni1nY206amZXb1NWQ1ZZWFJtTkJmQw==@64.177.66.60:8388#IL
+ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpieVg0LURWMEM0MlBMRlRXUWhNVEFRNjNtWjhxckRSQg@185.194.191.35:1352#4FreeIran-b9feb76e4e
+ss://1af36694-b548-4b18-89a0-bc076eab4ed7@178.172.227.124:10444?security=reality&encryption=none&pbk=0oTkcqwLTUNLnSOP-VUWErmy6usAIg-biBE6ioZO-Vo&headerType=none&fp=safari&type=tcp&flow=xtls-rprx-vision&sni=ads.x5.ru&sid=8debcf36f1cc69ff#Channel%20id%3A%20%40ConfigV2RayNG%20%F0%9F%87%A7%F0%9F%87%BE
+ss://35cbae61-ee10-4cb9-abb8-4950b35e9851@156.226.168.221:35193?encryption=none&flow=xtls-rprx-vision&type=raw&security=reality&sni=www.apple.com&fp=chrome&pbk=d_pn_DMaIxhCkNh80h0Mc7nP94hrlN--I8liOIREDxE&sid=e8daed2d&headertype=none#[1629][SC][0][SS][None][DeamNet_Proxy][2026-11-11][2026-11-13
+ss://ca52e2b6-fb9f-4dac-b6dc-49da9923f251@209.200.246.148:443?security=reality&encryption=none&pbk=uTmb-ytXsx8p0fkBz7A76SHpWk7_oVutIA4LGTE8BQk&headerType=&fp=chrome&type=tcp&flow=xtls-rprx-vision-udp443&sni=www.cloudflare.com&sid=f98843107912e782#[10682][CA][0][SS][None][v2rayNG_Matsuri][2026-11-02][2026-11-13
+ss://cda0862a-0f87-4be9-8ed8-1d0c9e382839@196.196.148.63:443?encryption=none&fp=&mode=auto&path=%2F0616f2d729aa&pbk=dtO7khFLUkpFDQOtNzo4Th4hJKLoPSY2VtD_9k4Hgiw&security=reality&sid=7b2b1a14a6e0630d&sni=fc82dfx.nl8.h1clayd.click&type=xhttp#[10775][SC][0][SS][None][oneclickvpnkeys][2026-11-11][2026-11-13
