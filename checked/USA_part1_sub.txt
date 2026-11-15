@@ -1,7 +1,6 @@
-ss://YWVzLTEyOC1nY206c2hhZG93c29ja3M=@156.146.38.167:443#%E7%BE%8E%E5%9B%BD_%E9%81%94%E6%8B%89%E6%96%AF
-ss://YWVzLTI1Ni1nY206WlJwZ2FCZUd4dEVOSVhndmhwa1pCS3o5R25XUlMyZFljeDlPK2EyaXdOND0=@185.230.230.18:19999#%F0%9F%87%BA%F0%9F%87%B8US-185.230.230.18-0105
-ss://055a1ce8-2a16-4a0d-a2c2-22826c9b2413@47.253.226.114:443?encryption=none&flow=xtls-rprx-vision&type=raw&security=reality&sni=www.cloudflare.com&fp=firefox&pbk=Svl81isn16RPAFnjtmYw7A6TPnsEPLHuYYaJht65Rzc&headertype=none#[272][US][0][SS][None][DeamNet_Proxy][2026-11-11][2026-11-13
-ss://YWVzLTI1Ni1nY206WlJwZ2FCZUd4dEVOSVhndmhwa1pCS3o5R25XUlMyZFljeDlPK2EyaXdOND0=@95.215.201.18:19999#%F0%9F%87%BA%F0%9F%87%B8US-95.215.201.18-0157
-ss://YWVzLTI1Ni1nY206bEdxczk1UWtGSG8yTlY@15.204.246.111:5498#%40ConfigV2RayNG
-ss://YWVzLTI1Ni1nY206WlJwZ2FCZUd4dEVOSVhndmhwa1pCS3o5R25XUlMyZFljeDlPK2EyaXdOND0=@169.197.142.68:19999#%F0%9F%87%BA%F0%9F%87%B8US-169.197.142.68-0121
+ss://327b1113-049e-4256-8d72-8815643dbb65@148.135.86.162:10000?security=reality&encryption=none&pbk=DCbnS4mIPc1W2-wI0MGHhykwzf2nVuZvBadErSE6MxU&host=%2F%3FTELEGRAM---MARAMBASHI---MARAMBASHI---MARAMBASHI---MARAMBASHI&headerType=none&fp=firefox&type=tcp&flow=xtls-rprx-vision&sni=addons.mozilla.org&sid=a1b2c3d4#[1519][US][0][SS][None][marambashi][2026-11-05][2026-11-13
+ss://YWVzLTI1Ni1nY206WlJwZ2FCZUd4dEVOSVhndmhwa1pCS3o5R25XUlMyZFljeDlPK2EyaXdOND0=@185.230.230.18:19999#%F0%9F%87%BA%F0%9F%87%B8US-185.230.230.18-0165
+ss://23b848b7-93e5-4d96-b36d-ed704912e5b7@5.34.178.120:443?encryption=none&flow=xtls-rprx-vision&fp=&pbk=4RaNuv9yehmcfpdzvRxCWWzEWERWzZSIHqcgg3l35Cw&security=reality&sid=e16bbf1a5bee2321&sni=www.cloudflare.com&type=tcp#[1003][US][0][SS][None][oneclickvpnkeys][2026-11-08][2026-11-13
+ss://a35c508f-4d5d-4531-842e-6e9d43c762c0@swo2.nexfile.net:4443?allowInsecure=1&encryption=none&fp=chrome&host=swo2.nexfile.net&mode=auto&path=%2Fapi%2Fv1%2Fsync%2F&security=tls&sni=swo2.nexfile.net&type=xhttp#[9733][US][0][SS][None][oneclickvpnkeys][2026-11-07][2026-11-13
 ss://1d1eda2e-0bd7-4478-877b-1c5425c6c4dd@48.102.170.205:8443?security=reality&encryption=none&pbk=yr_opKG6DGTppNDXkk-DhGSYJZXbb9o-caexk2FZO38&headerType=none&fp=firefox&type=tcp&flow=xtls-rprx-vision&sni=tradingview.com&sid=8f3c6e2a1b5d4f09#%40ConfigV2RayNG
+ss://719b9354-45e2-4718-8709-d965b64554db@2.24.124.64:443?security=reality&encryption=none&pbk=zpXR6Y36C8qUCIVk2p_j8C9KGeBk5xisLw66j3WFOls&headerType=none&type=tcp&flow=xtls-rprx-vision&sni=www.cloudflare.com&sid=9f1fc5a631ef3126#[3544][US][0][SS][None][VmessProtocol][2026-09-02][2026-11-13
