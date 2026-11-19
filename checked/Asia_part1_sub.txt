@@ -1,3 +1,2 @@
-ss://YWVzLTEyOC1nY206c2hhZG93c29ja3M=@149.22.87.240:443#%5Bpeasoft%2FNoMoreWalls%5D%F0%9F%87%AF%F0%9F%87%B5%5Bwww.v2nodes.com%5D%20ss-JP-1291...
-ss://YWVzLTI1Ni1nY206WlJwZ2FCZUd4dEVOSVhndmhwa1pCS3o5R25XUlMyZFljeDlPK2EyaXdOND0=@149.88.106.74:19999#%5Bermaozi%2Fget_subscribe%5D%F0%9F%8F%B3%5Bwww.v2nodes.com%5D%20ss-%20%2312
-ss://41b1c169-5905-4d98-b6a6-56896c25737c@103.106.229.37:21004/?type=tcp&encryption=none&flow=&sni=www.cloudflare.com&security=reality&pbk=HZwHZBP3x4Yo4UQiHcypRJIU_UdZY5OAapQM8RUqVAU&sid=2df2bd9d8366cef1#[1886][UnResolvedDomains][0][SS][None][oneclickvpnkeys][2026-11-14][2026-11-16
+ss://YWVzLTI1Ni1nY206M2VPRmVOc3NkZTdQWVlNdg@84.247.155.196:443#%F0%9F%8F%B4%20%D0%9D%D0%B5%D0%B8%D0%B7%D0%B2%D0%B5%D1%81%D1%82%D0%BD%D1%8B%D0%B9%20%5B%23%D0%A0%D0%9A%D0%9F%5D
+ss://a16bd0e2-ff2e-4e4c-a955-0c684255a065@sg.fasti.win:443/?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=sg.fasti.win&security=reality&pbk=-YTGWg5DjsLDyaDfr1D83kiUK22LVcrK3yC53lqqigs&sid=feedbacc#[9992][UnResolvedDomains][0][SS][None][oneclickvpnkeys][2026-11-14][2026-11-16
