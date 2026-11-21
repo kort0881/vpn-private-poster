@@ -1,1 +1,1 @@
-ss://2ae0670d-0bdf-409e-9a55-4e970252d378@37.235.247.81:8443?encryption=none&flow=xtls-rprx-vision&fp=&pbk=SbVKOEMjK0sIlbwg4akyBg5mL5KZwwB-ed4eEE7YnRc&security=reality&sid=6ba85179e30d4fc2&sni=apple.com&type=tcp#[1192][RU][0][SS][None][oneclickvpnkeys][2026-11-16][2026-11-19
+ss://38308ff1-5aa9-494f-a25a-0f2870d56b3e@vps3.nemnogogo.com:443?encryption=none&security=tls&serviceName=mobile.api.Event&sni=vps3.nemnogogo.com&type=grpc#[1659][RU][0][SS][None][oneclickvpnkeys][2026-11-11][2026-11-19
