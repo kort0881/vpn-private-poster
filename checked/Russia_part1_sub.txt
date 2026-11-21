@@ -1,1 +1,1 @@
-ss://38308ff1-5aa9-494f-a25a-0f2870d56b3e@vps3.nemnogogo.com:443?encryption=none&security=tls&serviceName=mobile.api.Event&sni=vps3.nemnogogo.com&type=grpc#[1659][RU][0][SS][None][oneclickvpnkeys][2026-11-11][2026-11-19
+ss://ebd1c0d6-7ff4-4b9f-8692-237517a27a64@83.217.201.82:443?security=reality&encryption=none&pbk=mza5Hn1aolSz65qu-UwvBP3oesxMe25r11o4nxvikF0&headerType=none&fp=chrome&spx=%2FHesarWeb&type=tcp&flow=xtls-rprx-vision&sni=skvoz-dpi.com&sid=93ae75024604f796#🔥Join+Telegram:@Farah_VPN🟣
