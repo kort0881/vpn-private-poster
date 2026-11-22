@@ -1,1 +1,2 @@
-ss://48ff2b70-e180-582f-8866-d9a2edeed5f5@ww13.levikogjgfdd.ir:23576?encryption=none&flow=xtls-rprx-vision&fp=&pbk=1y5h2FGWKXTJ9xLPCqPo6Mw7RxoZzh6fGkEQKNxpZ3s&security=reality&sni=fuck.rkn&type=tcp#[2449][US][0][SS][None][oneclickvpnkeys][2026-11-15][2026-11-19
+ss://MjAyMi1ibGFrZTMtY2hhY2hhMjAtcG9seTEzMDU6cURxN3FrcHNzZFpVMU12Uk94b0lieVh6RlBsVzA0cUNiQW1CTWY3ckFMbz0@129.146.75.79:50356#%F0%9F%87%BA%F0%9F%87%B8%20United%20States%201259
+ss://a35c508f-4d5d-4531-842e-6e9d43c762c0@swo2.nexfile.net:4443?allowInsecure=1&encryption=none&fp=chrome&host=swo2.nexfile.net&mode=auto&path=%2Fapi%2Fv1%2Fsync%2F&security=tls&sni=swo2.nexfile.net&type=xhttp#[10066][US][0][SS][None][oneclickvpnkeys][2026-11-16][2026-11-19
