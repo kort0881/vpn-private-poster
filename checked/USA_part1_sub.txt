@@ -1,2 +1,1 @@
-ss://a35c508f-4d5d-4531-842e-6e9d43c762c0@bl1.nexfile.net:4443?encryption=none&fp=chrome&mode=auto&path=%2Fapi%2Fv1%2Fsync%2F&security=tls&sni=bl1.nexfile.net&type=xhttp#[10218][US][0][SS][None][oneclickvpnkeys][2026-11-15][2026-11-22
-trojan://jyneij42qcfg3x9f@179.254.191.2:39105?type=tcp&security=none#BY
+ss://48ff2b70-e180-582f-8866-d9a2edeed5f5@ww13.levikogjgfdd.ir:23576?encryption=none&flow=xtls-rprx-vision&fp=&pbk=1y5h2FGWKXTJ9xLPCqPo6Mw7RxoZzh6fGkEQKNxpZ3s&security=reality&sni=fuck.rkn&type=tcp#[2511][US][0][SS][None][oneclickvpnkeys][2026-11-15][2026-11-22
