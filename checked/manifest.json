@@ -1,40 +1,47 @@
 {
-  "generated_at": "2026-11-24T17:10:35+00:00",
+  "generated_at": "2026-11-25T02:06:53+00:00",
   "files": [
     {
       "name": "Europe_part1_sub.txt",
       "region": "Europe",
-      "count": 15,
+      "count": 18,
       "check_level": "protocol",
-      "last_verified": "2026-11-24T17:10:35+00:00"
+      "last_verified": "2026-11-25T02:06:53+00:00"
     },
     {
       "name": "Asia_part1_sub.txt",
       "region": "Asia",
-      "count": 2,
+      "count": 4,
       "check_level": "protocol",
-      "last_verified": "2026-11-24T17:10:35+00:00"
+      "last_verified": "2026-11-25T02:06:53+00:00"
+    },
+    {
+      "name": "USA_part1_sub.txt",
+      "region": "USA",
+      "count": 1,
+      "check_level": "protocol",
+      "last_verified": "2026-11-25T02:06:53+00:00"
     },
     {
       "name": "Russia_part1_sub.txt",
       "region": "Russia",
       "count": 1,
       "check_level": "protocol",
-      "last_verified": "2026-11-24T17:10:35+00:00"
+      "last_verified": "2026-11-25T02:06:53+00:00"
     },
     {
       "name": "Unknown_part1_sub.txt",
       "region": "Unknown",
       "count": 3,
       "check_level": "protocol",
-      "last_verified": "2026-11-24T17:10:35+00:00"
+      "last_verified": "2026-11-25T02:06:53+00:00"
     },
     {
       "name": "Other_part1_sub.txt",
       "region": "Other",
       "count": 2,
       "check_level": "protocol",
-      "last_verified": "2026-11-24T17:10:35+00:00"
+      "last_verified": "2026-11-25T02:06:53+00:00"
     }
   ]
 }
