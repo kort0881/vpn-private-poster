@@ -1,1 +1,1 @@
-ss://Y2hhY2hhMjAtaWV0Zi1wb2x5MTMwNTpYZDRHOXhuN0FnVDg4bXNDWUM5TVpmYXZNVXFkM2RXRk5BdnN3aTZLZmFEOVljZXhwdE1iUG40Y1NFQ0VNekRndkFNb21BV0pIeXdlcUplcjk5c3NNVllHSDZUSzhrNGM@216.172.144.199:40643#%F0%9F%87%B3%F0%9F%87%B1NL_37%7C116KB%2Fs%7CB007-260618%20%5B578db894d612%5D
+trojan://963A4918-A630-29DA-A873-093CDF8AD784@sg.foldandflyhigh.com:443?type=ws&security=tls&sni=sg.foldandflyhigh.com&alpn=http%2F1.1&host=sg.foldandflyhigh.com&path=%2F#[947][US][0][TROJAN][None][DeamNet_Proxy][2026-11-25][2026-11-28

@@ -1,0 +1,2 @@
+ss://55b3fd10-3658-40a2-8951-ec90932d1d30@chatgpt.com:8443?mode=auto&path=%2F&security=tls&alpn=http%2F1.1%2Ch2%2Ch3&encryption=none&extra=%7B%22mode%22%3A%22auto%22%2C%22xPaddingBytes%22%3A%22100-1000%22%7D&insecure=0&fp=edge&type=xhttp&allowInsecure=0&sni=sinavm2.soft10.ir#%40ConfigV2RayNG
+vless://4e4f1f70-5e56-4a76-bb9d-db087f4690c4@104.21.70.21:443?type=ws&headerType=none&security=tls&encryption=none&sni=jp3.yohototo.top&fp=chrome&path=%2Ftyxyws&host=jp3.yohototo.top#%F0%9F%87%BA%F0%9F%87%B8%20%20USA%20%20%5B49%5D%20%20MIFA
